@@ -15,6 +15,28 @@ correo con asunto _Your WHOOP Export is Ready_ con un enlace de descarga.
 Cuatro CSV. Los nombres pueden variar levemente, por eso el parser detecta el
 tipo por encabezados además de por nombre.
 
+### El export sale en el idioma de tu cuenta
+
+Esto no está documentado en ningún lado y es la primera cosa que rompe un
+parser. Una cuenta en español no recibe los archivos de abajo: recibe
+`physiological_cycles.csv`, `sueño.csv`, `entrenamientos.csv` y
+`journal_entries.csv` — dos traducidos y dos no — con **todos** los encabezados
+en español:
+
+```
+Hora de inicio del ciclo · Puntuación de recuperación (%)
+Frecuencia cardíaca en reposo (lpm) · Variabilidad de la frecuencia cardíaca (ms)
+Temp. cutánea (grados centígrados) · Oxígeno en sangre % · Esfuerzo del día
+Inicio del sueño · Inicio de la vigilia · Duración del sueño (min) · Siesta
+Nombre de la actividad · Esfuerzo de actividad · Zona FC 1% · Duración (min)
+Texto de la pregunta · Respondió "Sí" · Notas
+```
+
+Por eso `normalizeHeader` pliega los acentos antes de comparar (`ñ` -> `n`,
+`ó` -> `o`) y cada matcher de `FIELD_MATCHERS` lista las dos variantes. Si
+aparece un export en un tercer idioma, ese es el único archivo que hay que
+tocar.
+
 ### `physiological_cycles.csv`
 
 Una fila por **ciclo fisiológico**, que va desde que te duermes hasta que te

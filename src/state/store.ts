@@ -6,6 +6,14 @@ import { clearExport, saveExport } from '@/lib/storage';
 export type RangeDays = 30 | 90 | 180 | 365 | 0;
 export type TabId = 'overview' | 'recovery' | 'sleep' | 'training' | 'habits' | 'data';
 
+/**
+ * Where the loaded export came from. Only the header caption depends on it, but
+ * the person needs to know: reading a chart built from synthetic data, or from
+ * a folder on disk, is a different act than reading one built from their own
+ * upload.
+ */
+export type ExportSource = 'file' | 'demo' | 'local';
+
 export const RANGES: { value: RangeDays; label: string }[] = [
   { value: 30, label: '30d' },
   { value: 90, label: '90d' },
@@ -29,9 +37,9 @@ interface State {
   questions: string[];
   range: RangeDays;
   tab: TabId;
-  isDemo: boolean;
+  source: ExportSource;
   loaded: boolean;
-  setExport: (data: WhoopExport, options?: { demo?: boolean; persist?: boolean }) => void;
+  setExport: (data: WhoopExport, options?: { source?: ExportSource; persist?: boolean }) => void;
   setRange: (range: RangeDays) => void;
   setTab: (tab: TabId) => void;
   reset: () => void;
@@ -43,7 +51,7 @@ export const useStore = create<State>((set) => ({
   questions: [],
   range: 365,
   tab: 'overview',
-  isDemo: false,
+  source: 'file',
   loaded: false,
   setExport: (data, options) => {
     if (options?.persist) void saveExport(data);
@@ -51,7 +59,7 @@ export const useStore = create<State>((set) => ({
       raw: data,
       allDays: buildDayRecords(data),
       questions: journalQuestions(data),
-      isDemo: options?.demo ?? false,
+      source: options?.source ?? 'file',
       loaded: true,
     });
   },
@@ -63,7 +71,7 @@ export const useStore = create<State>((set) => ({
       raw: emptyExport(),
       allDays: [],
       questions: [],
-      isDemo: false,
+      source: 'file',
       loaded: false,
       tab: 'overview',
     });

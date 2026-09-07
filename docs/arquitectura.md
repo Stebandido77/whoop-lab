@@ -29,11 +29,20 @@ un lugar donde se prueba y un lugar donde se corrige.
 
 `columns.ts` traduce encabezados a campos. WHOOP ha renombrado columnas más de
 una vez y el texto cambia entre idiomas y niveles de membresía, así que el mapeo
-normaliza el encabezado (minúsculas, sin caracteres no alfanuméricos) y busca
-subcadenas. **El orden de `FIELD_MATCHERS` importa**: el primer matcher que
-acepta un encabezado se lo queda. Por eso las duraciones de fase de sueño están
-listadas antes del `duration` genérico de actividades; si no, "Asleep duration
-(min)" se leería como la duración de un entrenamiento.
+normaliza el encabezado (sin acentos, minúsculas, sin caracteres no
+alfanuméricos) y busca subcadenas. **El orden de `FIELD_MATCHERS` importa**: el
+primer matcher que acepta un encabezado se lo queda. Por eso las duraciones de
+fase de sueño están listadas antes del `duration` genérico de actividades; si
+no, "Asleep duration (min)" se leería como la duración de un entrenamiento.
+
+Cada campo lista su fragmento en inglés y su fragmento en español, porque una
+cuenta en español recibe el export **entero** traducido: `sueño.csv`,
+`entrenamientos.csv` y todos los encabezados. Los fragmentos en español son
+largos a propósito (`duraciondelsueno`, no `sueno`): el export repite los mismos
+sustantivos en una docena de columnas y un fragmento corto le robaría el
+encabezado a otro campo. `detectKind` tiene, además de la detección por nombre,
+un respaldo por encabezado para cada uno de los cuatro archivos, porque el
+nombre deja de servir apenas cambia el idioma.
 
 `parse.ts` convierte texto a valores. Dos decisiones que parecen menores y no lo
 son:
@@ -105,3 +114,70 @@ ventana inmediatamente anterior del mismo tamaño, que es lo que hace posible el
 IndexedDB con `idb-keyval`. localStorage no alcanza: un diario de tres años son
 varios miles de filas. Al leer se revive cualquier fecha que haya vuelto como
 string, porque no todos los navegadores conservan `Date` en el structured clone.
+
+## Desarrollo con datos reales
+
+Con `npm run dev`, si hay CSV en `data/` la app arranca directamente con ellos y
+se salta la pantalla de importación. El encabezado dice **«datos locales de
+data/»**, con el mismo mecanismo que anuncia la demo sintética: el store guarda
+un campo `source` (`'file' | 'demo' | 'local'`) y `App.tsx` elige el subtítulo.
+
+```
+data/**/*.csv
+   │  import.meta.glob(query: '?raw')   src/lib/localData.ts
+   ▼
+readLocalData()  ->  ingestCsv (el mismo del drop zone)
+   ▼
+setExport(data, { source: 'local' })
+```
+
+Reglas del flujo:
+
+- **`data/` gana sobre IndexedDB.** Mientras haya CSV en la carpeta, esa es la
+  fuente. «Cargar otro export» sigue funcionando y sobreescribe lo cargado
+  durante la sesión, pero al recargar la página vuelve a mandar `data/`. Si
+  quieres volver al export guardado, vacía la carpeta.
+- **Lo que sale de `data/` no se persiste.** La carpeta ya es la copia durable;
+  cachearla en IndexedDB solo serviría para que sobreviva a borrarla.
+- **Si `data/` está vacía no cambia nada:** se restaura el último import desde
+  IndexedDB, exactamente como antes.
+
+### Por qué esto no puede llegar a producción
+
+`src/lib/localData.ts` inlinea el texto de los CSV. Un bundle que los cargara
+publicaría el historial de salud de alguien, así que hay **dos guardas
+independientes** y cada una basta por sí sola:
+
+1. El único import del módulo está detrás de `import.meta.env.DEV` en `App.tsx`.
+   Vite lo reemplaza por el literal `false`, así que la rama y su import dinámico
+   son código muerto antes de que Rollup empiece.
+2. `stripLocalData` en `vite.config.ts` (`apply: 'build'`) reemplaza el
+   contenido del módulo por un stub vacío durante `vite build`.
+
+Comprobado desactivando cada una: con la guarda 1 sola el módulo no aparece en
+`dist/`; con la guarda 2 sola aparece un chunk de 0,05 kB sin un solo dato;
+desactivando ambas, el bundle se lleva los CSV completos en un chunk de 256 kB.
+
+Si tocas cualquiera de las dos, vuelve a verificar:
+
+```bash
+npm run build
+grep -rE '2026-|Duración del sueño|Inicio de la vigilia|UTC-05:00' dist/
+```
+
+No debe imprimir nada. Ajusta el año y los encabezados a los de tu export.
+
+### El fixture
+
+`npm run fixture` lee `data/`, toma la ventana de ciclos más reciente y escribe
+en `src/test/fixtures/` una copia anonimizada que **sí** se versiona: fechas
+desplazadas a 1987, ruido en los valores fisiológicos, preguntas del diario
+recortadas a una lista neutra. `src/test/fixtures/README.md` detalla qué se
+transforma y por qué; `src/test/fixture.test.ts` corre el pipeline completo
+sobre ella y verifica las invariantes que ninguna fila escrita a mano
+reproduce: un registro por día sin huecos, `recoveryNext` alineado con el día
+siguiente y ni un `NaN`.
+
+El script corre con `node --experimental-strip-types`, así que lo único que
+importa de `src/` es `columns.ts`, que no tiene dependencias. Necesita Node
+22.6 o superior; el `.nvmrc` ya apunta a 22.

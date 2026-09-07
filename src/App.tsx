@@ -2,8 +2,14 @@ import { useEffect, useMemo } from 'react';
 import { ImportView, Segmented } from '@/components';
 import { fmtDayLong } from '@/lib/format';
 import { loadExport } from '@/lib/storage';
-import { RANGES, selectWindow, TABS, useStore, type TabId } from '@/state/store';
+import { RANGES, selectWindow, TABS, useStore, type ExportSource, type TabId } from '@/state/store';
 import { DataView, HabitsView, OverviewView, RecoveryView, SleepView, TrainingView } from '@/views';
+
+const SUBTITLES: Record<ExportSource, string> = {
+  file: 'tus datos, sin el filtro de la app',
+  demo: 'datos sintéticos de demostración',
+  local: 'datos locales de data/',
+};
 
 export default function App() {
   const {
@@ -12,7 +18,7 @@ export default function App() {
     raw,
     range,
     tab,
-    isDemo,
+    source,
     loaded,
     setExport,
     setRange,
@@ -20,11 +26,35 @@ export default function App() {
     reset,
   } = useStore();
 
-  // Restore the last import so returning to the page is not a re-upload.
   useEffect(() => {
-    void loadExport().then((data) => {
-      if (data) setExport(data);
-    });
+    let cancelled = false;
+
+    async function boot() {
+      // In `npm run dev`, an export sitting in `data/` wins over the cache, so
+      // the folder is the single source of truth while hacking. `import.meta.env.DEV`
+      // is a compile-time constant: in a build this whole branch is dead code and
+      // `@/lib/localData` never enters the bundle. See vite.config.ts.
+      if (import.meta.env.DEV) {
+        const { readLocalData } = await import('@/lib/localData');
+        const local = readLocalData();
+        if (local) {
+          // Deliberately not persisted: `data/` is already the durable copy, and
+          // caching it would outlive deleting the folder.
+          if (!cancelled) setExport(local.data, { source: 'local' });
+          console.info(`[whoop-lab] datos locales de data/: ${local.files.join(', ')}`);
+          return;
+        }
+      }
+
+      // Restore the last import so returning to the page is not a re-upload.
+      const stored = await loadExport();
+      if (stored && !cancelled) setExport(stored);
+    }
+
+    void boot();
+    return () => {
+      cancelled = true;
+    };
   }, [setExport]);
 
   const { days, previous } = useMemo(() => selectWindow(allDays, range), [allDays, range]);
@@ -32,7 +62,7 @@ export default function App() {
   if (!loaded || !allDays.length) {
     return (
       <div className="wrap">
-        <Header subtitle="tus datos, sin el filtro de la app" />
+        <Header subtitle={SUBTITLES.file} />
         <ImportView />
       </div>
     );
@@ -40,11 +70,7 @@ export default function App() {
 
   return (
     <div className="wrap">
-      <Header
-        subtitle={
-          isDemo ? 'datos sintéticos de demostración' : 'tus datos, sin el filtro de la app'
-        }
-      >
+      <Header subtitle={SUBTITLES[source]}>
         <Segmented options={RANGES} value={range} onChange={setRange} ariaLabel="Rango de fechas" />
         <button type="button" className="ghost" onClick={reset}>
           Cargar otro export

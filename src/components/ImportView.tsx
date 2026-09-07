@@ -82,7 +82,7 @@ export function ImportView() {
           type="button"
           className="ghost"
           style={{ padding: '2px 8px' }}
-          onClick={() => setExport(generateDemoExport(), { demo: true })}
+          onClick={() => setExport(generateDemoExport(), { source: 'demo' })}
         >
           mira una demo con datos sintéticos
         </button>

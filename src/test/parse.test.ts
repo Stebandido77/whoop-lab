@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cycleDay, ingestCsv, parseBoolean, parseNumber, parseTimestamp } from '@/lib/whoop/parse';
-import { detectKind, mapHeaders } from '@/lib/whoop/columns';
+import { detectKind, mapHeaders, normalizeHeader } from '@/lib/whoop/columns';
 import { emptyExport } from '@/lib/whoop/types';
 import { buildDayRecords } from '@/lib/whoop/model';
 
@@ -66,6 +66,73 @@ describe('header mapping', () => {
       'journal',
     );
     expect(detectKind('random.csv', ['a', 'b'])).toBeNull();
+  });
+});
+
+/**
+ * A Spanish account exports `sueño.csv` and `entrenamientos.csv` with every
+ * header translated. Nothing about that is signposted: the files parse to zero
+ * rows and the app shows an empty dashboard, so these cases have to be pinned.
+ */
+describe('export en español', () => {
+  const ES_CYCLES = `Hora de inicio del ciclo,Hora de finalización del ciclo,Zona horaria del ciclo,Puntuación de recuperación (%),Frecuencia cardíaca en reposo (lpm),Variabilidad de la frecuencia cardíaca (ms),Temp. cutánea (grados centígrados),Oxígeno en sangre %,Esfuerzo del día,Energía quemada (cal),FC máx. (lpm),FC promedio (lpm),Inicio del sueño,Inicio de la vigilia,Calificación del sueño (%),Frecuencia respiratoria (rpm),Duración del sueño (min),Tiempo en la cama (min),Duración de sueño ligero (min),Duración de sueño profundo (SWS) (min),Duración de sueño REM (min),Tempo despierto/a (min),Sueño necesario (min),Deuda de sueño (min),Eficiencia del sueño %,Regularidad del sueño %
+1987-01-05 23:12:00,1987-01-06 22:40:00,UTC-05:00,71,52,84,33.4,95.8,12.4,2680,168,74,1987-01-05 23:12:00,1987-01-06 07:05:00,94,14.6,432,473,210,88,134,41,460,55,91,78
+1987-01-06 23:40:00,1987-01-07 23:01:00,UTC-05:00,48,56,64,33.6,95.1,15.9,2990,176,79,1987-01-06 23:40:00,1987-01-07 06:32:00,80,15.4,371,412,192,70,109,41,464,120,90,71`;
+
+  const ES_SLEEPS = `Hora de inicio del ciclo,Inicio del sueño,Inicio de la vigilia,Calificación del sueño (%),Duración del sueño (min),Tiempo en la cama (min),Siesta
+1987-01-05 23:12:00,1987-01-06 14:00:00,1987-01-06 14:35:00,1,35,38,true`;
+
+  const ES_WORKOUTS = `Hora de inicio del ciclo,Hora de inicio del entrenamiento,Hora de finalización del entrenamiento,Duración (min),Nombre de la actividad,Esfuerzo de actividad,Energía quemada (cal),FC máx. (lpm),FC promedio (lpm),Zona FC 1%,Zona FC 2%,Zona FC 3%,Zona FC 4%,Zona FC 5%,GPS habilitado
+1987-01-05 23:12:00,1987-01-06 18:10:00,1987-01-06 19:35:00,85,Tenis,11.2,720,178,141,10,18,32,28,12,false`;
+
+  const ES_JOURNAL = `Hora de inicio del ciclo,Hora de finalización del ciclo,Zona horaria del ciclo,Texto de la pregunta,"Respondió ""Sí""",Notas
+1987-01-05 23:12:00,1987-01-06 22:40:00,UTC-05:00,¿Consumiste cafeína?,true,`;
+
+  it('detecta los archivos aunque el nombre esté traducido', () => {
+    const headersOf = (csv: string) => csv.split('\n')[0].split(',');
+    expect(detectKind('sueño.csv', headersOf(ES_SLEEPS))).toBe('sleeps');
+    expect(detectKind('entrenamientos.csv', headersOf(ES_WORKOUTS))).toBe('workouts');
+    expect(detectKind('physiological_cycles.csv', headersOf(ES_CYCLES))).toBe('cycles');
+    expect(detectKind('journal_entries.csv', headersOf(ES_JOURNAL))).toBe('journal');
+  });
+
+  it('pliega los acentos al normalizar, para que los matchers se lean', () => {
+    expect(normalizeHeader('Duración del sueño (min)')).toBe('duraciondelsuenomin');
+    expect(normalizeHeader('Respondió "Sí"')).toBe('respondiosi');
+  });
+
+  it('no deja que la duración de actividad se lleve las fases de sueño', () => {
+    const map = mapHeaders(ES_CYCLES.split('\n')[0].split(','));
+    expect(map.asleep).toBe('Duración del sueño (min)');
+    expect(map.light).toBe('Duración de sueño ligero (min)');
+    expect(map.deep).toBe('Duración de sueño profundo (SWS) (min)');
+    expect(map.rem).toBe('Duración de sueño REM (min)');
+    expect(map.duration).toBeUndefined();
+
+    const workouts = mapHeaders(ES_WORKOUTS.split('\n')[0].split(','));
+    expect(workouts.duration).toBe('Duración (min)');
+    expect(workouts.activityStrain).toBe('Esfuerzo de actividad');
+    expect(workouts.strain).toBeUndefined();
+  });
+
+  it('llega hasta DayRecord con los cuatro archivos traducidos', () => {
+    const data = emptyExport();
+    expect(ingestCsv('physiological_cycles.csv', ES_CYCLES, data)?.rows).toBe(2);
+    expect(ingestCsv('sueño.csv', ES_SLEEPS, data)?.rows).toBe(1);
+    expect(ingestCsv('entrenamientos.csv', ES_WORKOUTS, data)?.rows).toBe(1);
+    expect(ingestCsv('journal_entries.csv', ES_JOURNAL, data)?.rows).toBe(1);
+
+    const days = buildDayRecords(data);
+    expect(days).toHaveLength(2);
+    expect(days[0].day).toBe('1987-01-06');
+    expect(days[0].recovery).toBe(71);
+    expect(days[0].hrv).toBe(84);
+    expect(days[0].strain).toBeCloseTo(12.4, 5);
+    expect(days[0].sleepHours).toBeCloseTo(7.2, 5);
+    expect(days[0].napMinutes).toBe(35);
+    expect(days[0].workoutMinutes).toBe(85);
+    expect(days[0].workouts[0].activity).toBe('Tenis');
+    expect(days[0].journal['¿Consumiste cafeína?']).toBe(true);
   });
 });
 

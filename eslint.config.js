@@ -17,4 +17,10 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },
+  {
+    // Maintainer tooling: runs in Node, never ships, and has no components.
+    files: ['scripts/**/*.ts', 'vite.config.ts'],
+    languageOptions: { globals: globals.node },
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
 );

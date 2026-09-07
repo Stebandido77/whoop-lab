@@ -40,8 +40,8 @@ IndexedDB de tu propia máquina y no viajan a ningún servidor. No hay backend, 
 hay analítica y no hay una sola petición de red después de cargar la página. Lo
 puedes verificar leyendo `src/lib/whoop/` en unos diez minutos.
 
-El `.gitignore` además bloquea `*.csv` para que no subas tus datos de salud por
-accidente mientras trabajas en el repo.
+El `.gitignore` además bloquea `*.csv` y toda la carpeta `data/`, para que no
+subas tus datos de salud por accidente mientras trabajas en el repo.
 
 ## Cómo sacar tus datos
 
@@ -54,6 +54,11 @@ Data Export**). Te llega un correo con un ZIP con cuatro archivos:
 | `sleeps.csv`               | Cada sueño y siesta, con fases                                                 |
 | `workouts.csv`             | Actividades clásicas. **No incluye sesiones de Strength Trainer**              |
 | `journal_entries.csv`      | Todas tus respuestas del diario                                                |
+
+El export sale en el idioma de tu cuenta: si la tienes en español te llegan
+`sueño.csv` y `entrenamientos.csv`, con todos los encabezados traducidos. El
+parser lee las dos variantes, porque compara subcadenas del encabezado sin
+acentos en vez de nombres exactos.
 
 Límites que conviene tener presentes: un export cada 24 horas, y a inicios de
 2026 el export no trae actividades de recuperación, stress diario, pasos ni
@@ -78,7 +83,24 @@ npm run build      # typecheck + bundle de producción
 npm test           # pruebas del parser y de la estadística
 npm run lint
 npm run format
+npm run fixture    # regenera el fixture anonimizado a partir de data/
 ```
+
+### Trabajar con tu propio export
+
+Descomprime tu export en [`data/`](data/README.md) y `npm run dev` arranca
+directamente con él, sin pasar por la pantalla de importación. El encabezado dice
+**«datos locales de data/»** para que siempre sepas de dónde salen los números.
+La carpeta está en el `.gitignore`, y dos guardas independientes la mantienen
+fuera de `npm run build`: el lector solo se importa detrás de
+`import.meta.env.DEV`, y un plugin de Vite vacía el módulo durante el build. El
+flujo y el comando para verificarlo están en
+[docs/arquitectura.md](docs/arquitectura.md#desarrollo-con-datos-reales).
+
+`npm run fixture` convierte esa carpeta en los CSV anonimizados de
+`src/test/fixtures/`: fechas desplazadas a un año ficticio, ruido en cada valor
+fisiológico y preguntas del diario recortadas a una lista neutra. Esos **sí** se
+versionan, y `src/test/fixture.test.ts` corre el pipeline completo sobre ellos.
 
 ## Decisiones técnicas
 
@@ -100,6 +122,9 @@ src/
   components/    Panel, KpiCard, Legend, Segmented, ImportView
   views/         un archivo por pestaña
   state/         store de zustand y el selector de rango
+  test/          pruebas, y el fixture anonimizado en test/fixtures/
+scripts/         herramientas de mantenimiento (make-fixture.ts)
+data/            tu propio export, ignorado por git, solo para desarrollo
 ```
 
 Lee [docs/arquitectura.md](docs/arquitectura.md) antes de tu primer cambio. La

@@ -41,8 +41,8 @@ IndexedDB on your own machine, and never sent anywhere. There is no backend, no
 analytics and no network request after the page loads. You can verify that in
 about ten minutes of reading `src/lib/whoop/`.
 
-`.gitignore` also blocks `*.csv` so you cannot accidentally commit your own
-health data while hacking on this.
+`.gitignore` also blocks `*.csv` and the whole of `data/`, so you cannot
+accidentally commit your own health data while hacking on this.
 
 ## Getting your data
 
@@ -55,6 +55,11 @@ Data Export**). You get an email with a ZIP containing four files:
 | `sleeps.csv`               | Every sleep and nap, with stage breakdown                              |
 | `workouts.csv`             | Classic activities. **Strength Trainer sessions are not included**     |
 | `journal_entries.csv`      | Every journal answer you have ever given                               |
+
+The export comes out in your account's language: a Spanish account gets
+`sueño.csv` and `entrenamientos.csv` with every header translated. The parser
+handles both, matching on accent-folded substrings of the header rather than on
+exact names.
 
 Limits worth knowing: one export per 24 hours, and as of early 2026 the export
 excludes recovery activities, daily stress, steps and VO2 Max. See
@@ -78,7 +83,23 @@ npm run build      # typecheck + production bundle
 npm test           # unit tests for the parser and the statistics
 npm run lint       # eslint
 npm run format     # prettier
+npm run fixture    # regenerate the anonymised test fixture from data/
 ```
+
+### Working against your own export
+
+Unzip your export into [`data/`](data/README.md) and `npm run dev` will start on
+it, skipping the import screen — the header says _datos locales de data/_ so you
+always know where the numbers came from. The folder is git-ignored, and two
+independent guards keep it out of `npm run build`: the reader is imported only
+behind `import.meta.env.DEV`, and a Vite plugin blanks the module during a build.
+[docs/arquitectura.md](docs/arquitectura.md#desarrollo-con-datos-reales) has the
+flow and the command to verify it.
+
+`npm run fixture` turns that folder into the anonymised CSVs in
+`src/test/fixtures/` — dates moved to a fictional year, noise on every
+physiological value, journal questions cut to a neutral list. Those _are_
+committed, and `src/test/fixture.test.ts` runs the whole pipeline over them.
 
 ## Stack and why
 
@@ -100,6 +121,9 @@ src/
   components/    Panel, KpiCard, Legend, Segmented, ImportView
   views/         one file per tab
   state/         zustand store and the range/window selector
+  test/          unit tests, plus the anonymised fixture in test/fixtures/
+scripts/         maintainer tooling (make-fixture.ts)
+data/            your own export, git-ignored, dev only
 ```
 
 Read [docs/arquitectura.md](docs/arquitectura.md) before your first change; the

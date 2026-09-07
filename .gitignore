@@ -13,3 +13,13 @@ coverage
 *.csv
 whoop-export*/
 my_whoop_data*/
+
+# En data/ va tu export descomprimido. Se ignora entero: solo se versionan
+# el marcador de carpeta y su README.
+data/*
+!data/.gitkeep
+!data/README.md
+
+# El fixture sí se versiona: está anonimizado y regenerado por
+# `npm run fixture` (scripts/make-fixture.ts). Nunca pongas ahí un CSV crudo.
+!src/test/fixtures/*.csv
