@@ -1,0 +1,32 @@
+name: Indicador o funcionalidad
+description: Proponer algo nuevo
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Revisa primero [docs/roadmap.md](../../blob/main/docs/roadmap.md): puede
+        que ya esté especificado y solo falte que alguien lo construya.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Qué pregunta querrías poder responder
+      description: Descríbelo como pregunta, no como solución.
+      placeholder: ¿Cuánto me cuesta en recuperación una sesión de tenis frente a una de pesas?
+    validations:
+      required: true
+
+  - type: textarea
+    id: formula
+    attributes:
+      label: Cómo se calcularía
+      description: Si tienes la fórmula o una referencia, ponla acá.
+
+  - type: checkboxes
+    id: data
+    attributes:
+      label: Datos necesarios
+      options:
+        - label: Se puede calcular con lo que trae el export
+        - label: Necesitaría la API v2 (fuera de alcance de este repo)

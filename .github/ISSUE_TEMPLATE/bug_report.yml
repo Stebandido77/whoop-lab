@@ -1,0 +1,42 @@
+name: Reporte de bug
+description: Algo no funciona como debería
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **No adjuntes tus datos de WHOOP.** Si necesitas mostrar un CSV, pega
+        solo la fila de encabezados o inventa filas con valores falsos.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: Qué pasó
+      description: Qué esperabas y qué viste.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Cómo reproducirlo
+      placeholder: |
+        1. Cargar el export
+        2. Ir a la pestaña Sueño
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Navegador y sistema operativo
+      placeholder: Chrome 141 en macOS 15
+    validations:
+      required: true
+
+  - type: textarea
+    id: headers
+    attributes:
+      label: Encabezados del CSV (solo si es un problema de importación)
+      render: text

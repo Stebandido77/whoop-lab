@@ -1,0 +1,100 @@
+/*
+ * One palette, three declarations: light default, system dark, explicit dark.
+ * Charts read these through getComputedStyle, so every colour in the app —
+ * including SVG fills — resolves from exactly one place.
+ */
+:root {
+  --ground: #edf0f2;
+  --panel: #ffffff;
+  --panel-2: #f6f8f9;
+  --panel-3: #eaeef0;
+  --rule: #d3dae0;
+  --rule-soft: #e6ebee;
+  --grid: #e4e9ec;
+
+  --ink: #141a20;
+  --ink-2: #3d4954;
+  --muted: #6c7985;
+
+  --hi: #0f6e63;
+  --mid: #c0821b;
+  --lo: #b03f36;
+
+  --strain: #2b54c4;
+  --hrv: #6e42a5;
+  --sleep: #1e7c8c;
+
+  --deep: #233f86;
+  --rem: #4a7fd1;
+  --light: #93b4e4;
+  --wake: #c9d3dc;
+
+  --tip-bg: #141a20;
+  --tip-ink: #f2f5f7;
+
+  --radius: 4px;
+  --font-ui: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --ground: #0e1317;
+    --panel: #151b21;
+    --panel-2: #1a2129;
+    --panel-3: #20282f;
+    --rule: #2a333b;
+    --rule-soft: #212a31;
+    --grid: #242d35;
+
+    --ink: #e3e9ed;
+    --ink-2: #b2bdc6;
+    --muted: #7e8c99;
+
+    --hi: #3fc0a8;
+    --mid: #e0a63c;
+    --lo: #e4695e;
+
+    --strain: #7093f7;
+    --hrv: #b389e8;
+    --sleep: #4fbbd0;
+
+    --deep: #3a5bc7;
+    --rem: #6e9be8;
+    --light: #9fbeea;
+    --wake: #3b4750;
+
+    --tip-bg: #e3e9ed;
+    --tip-ink: #151b21;
+  }
+}
+
+:root[data-theme='dark'] {
+  --ground: #0e1317;
+  --panel: #151b21;
+  --panel-2: #1a2129;
+  --panel-3: #20282f;
+  --rule: #2a333b;
+  --rule-soft: #212a31;
+  --grid: #242d35;
+
+  --ink: #e3e9ed;
+  --ink-2: #b2bdc6;
+  --muted: #7e8c99;
+
+  --hi: #3fc0a8;
+  --mid: #e0a63c;
+  --lo: #e4695e;
+
+  --strain: #7093f7;
+  --hrv: #b389e8;
+  --sleep: #4fbbd0;
+
+  --deep: #3a5bc7;
+  --rem: #6e9be8;
+  --light: #9fbeea;
+  --wake: #3b4750;
+
+  --tip-bg: #e3e9ed;
+  --tip-ink: #151b21;
+}

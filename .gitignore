@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-ssr
+coverage
+*.local
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.tsbuildinfo
+
+# Nunca subas tu export: son datos de salud.
+*.csv
+whoop-export*/
+my_whoop_data*/

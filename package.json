@@ -1,0 +1,61 @@
+{
+  "name": "whoop-lab",
+  "version": "0.1.0",
+  "private": false,
+  "description": "A private, local-first analytics dashboard for your WHOOP export. Better charts than the app, and your data never leaves the browser.",
+  "keywords": [
+    "whoop",
+    "quantified-self",
+    "dashboard",
+    "hrv",
+    "sleep",
+    "data-visualization",
+    "local-first",
+    "react",
+    "typescript"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write \"**/*.{ts,tsx,css,md,json,yml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,css,md,json,yml}\"",
+    "typecheck": "tsc -b --noEmit"
+  },
+  "dependencies": {
+    "d3-scale": "^4.0.2",
+    "d3-shape": "^3.2.0",
+    "idb-keyval": "^6.2.1",
+    "jszip": "^3.10.1",
+    "papaparse": "^5.4.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.20.0",
+    "@types/d3-scale": "^4.0.8",
+    "@types/d3-shape": "^3.1.6",
+    "@types/papaparse": "^5.3.15",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.20.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "globals": "^15.15.0",
+    "prettier": "^3.5.1",
+    "typescript": "~5.7.3",
+    "typescript-eslint": "^8.24.0",
+    "vite": "^6.1.0",
+    "vitest": "^3.0.5"
+  }
+}
