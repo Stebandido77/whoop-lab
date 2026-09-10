@@ -123,10 +123,36 @@ export function rollingSd(xs: Num[], window: number): (number | null)[] {
 }
 
 /** Student-t CDF via the regularized incomplete beta function. */
-function studentCdf(t: number, df: number): number {
+export function studentCdf(t: number, df: number): number {
   if (df <= 0) return 0.5;
   const x = df / (df + t * t);
   return 1 - 0.5 * incompleteBeta(x, df / 2, 0.5);
+}
+
+/**
+ * Two-sided p-value for a t statistic. The one place in the project that turns
+ * a t into a p, so the tail convention is decided once.
+ */
+export function tTest(t: number, df: number): number | null {
+  if (!Number.isFinite(t) || df <= 0) return null;
+  return Math.min(1, Math.max(0, 2 * (1 - studentCdf(Math.abs(t), df))));
+}
+
+/**
+ * Inverse Student-t CDF by bisection. Confidence bands need a critical value
+ * and there is no closed form; 80 halvings of a wide bracket land well inside
+ * double precision, and a fit only needs one call.
+ */
+export function tQuantile(p: number, df: number): number | null {
+  if (!(p > 0 && p < 1) || df <= 0) return null;
+  let lo = -400;
+  let hi = 400;
+  for (let i = 0; i < 80; i++) {
+    const mid = (lo + hi) / 2;
+    if (studentCdf(mid, df) < p) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
 }
 
 /** Regularized incomplete beta I_x(a, b), Lentz continued fraction (NR 6.4). */

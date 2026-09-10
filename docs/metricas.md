@@ -204,9 +204,11 @@ más horas de sueño y strain del día anterior como controles. Mostrar
 coeficientes con error estándar.
 
 El panel univariado confunde: el alcohol se correlaciona con el fin de semana,
-con acostarse tarde y con dormir menos. La regresión separa esos efectos. Se
-puede resolver con mínimos cuadrados por ecuaciones normales sobre una matriz
-pequeña; no hace falta librería.
+con acostarse tarde y con dormir menos. La regresión separa esos efectos. El
+estimador ya existe: `ols` de [§6.1](#61-mínimos-cuadrados-multivariados--ols),
+con errores HC1. Falta la vista, y pasar los p-valores por
+[§6.3](#63-corrección-por-comparaciones-múltiples--benjaminihochberg) antes de
+marcar nada.
 
 ### 4.4 Interacciones — **pendiente**
 
@@ -246,3 +248,373 @@ datos, no una promesa.
 
 Descargar cualquier panel como SVG y como PNG. Como todo se dibuja en SVG propio,
 serializar el nodo y pasarlo por un canvas es directo.
+
+---
+
+## 6. Métodos econométricos
+
+Esta sección especifica los estimadores de `src/lib/econ/`. No son indicadores:
+son la maquinaria con la que se calculan los indicadores de las secciones
+anteriores que necesitan más que una media o una correlación (§4.2, §4.3, §4.4,
+§5.3). Cada uno vive en un módulo propio, no depende de ninguna librería y tiene
+pruebas contra casos con respuesta conocida en `src/test/econ.*.test.ts`.
+
+### Reglas que aplican a todos
+
+1. **Toda estimación reporta n.** Un coeficiente sin su n no es un resultado.
+2. **Por debajo del n mínimo no se estima.** Los estimadores devuelven
+   `{ ok: false, n, minN, missing }` en vez de un número frágil, y `missing` es
+   exactamente lo que el panel escribe: «faltan 14 días».
+3. **Los intervalos de confianza son parte de la estimación**, nunca un extra
+   opcional. Un coeficiente se dibuja con su intervalo o no se dibuja.
+4. **Toda familia de pruebas pasa por Benjamini–Hochberg.** Se marca por q,
+   nunca por p.
+5. **Nada de esto es causal.** Son datos observacionales de una sola persona sin
+   asignación aleatoria. Los métodos separan asociaciones de otras asociaciones;
+   no separan causas.
+
+### 6.1 Mínimos cuadrados multivariados — `ols`
+
+Regresión de y sobre una matriz de diseño, resuelta por **descomposición QR de
+Householder con pivoteo por columnas**, no por ecuaciones normales.
+
+El motivo es de condicionamiento. Un diseño con efectos fijos de día de semana y
+de mes mete decenas de columnas indicadoras casi paralelas; formar XʹX eleva al
+cuadrado el número de condición y Cholesky o falla o —peor— devuelve
+coeficientes equivocados en la tercera cifra sin avisar. QR trabaja sobre X
+directamente. El pivoteo, además, regala la detección de rango: se puede pasar
+el juego completo de indicadoras más el intercepto y la columna redundante se
+descarta con nombre (`dropped`) en vez de producir una matriz singular. Una
+columna se considera combinación lineal de las anteriores cuando su norma
+residual cae por debajo de 10⁻¹² de la mayor norma inicial.
+
+#### El sándwich: `vcov` es obligatorio
+
+Los errores estándar salen de un sándwich `(XʹX)⁻¹ Ω̂ (XʹX)⁻¹ · n/(n−k)`, y lo
+único que cambia entre los dos estimadores disponibles es Ω̂. **`vcov` no tiene
+valor por omisión**: elegir mal no produce un error, produce intervalos del
+ancho equivocado, así que quien llama tiene que declarar qué supuesto está
+dispuesto a hacer. El tipo lo exige y el compilador lo cobra.
+
+**`vcov: 'hc1'` — robusto a heterocedasticidad.**
+
+```
+Ω̂ = Σᵢ uᵢ² xᵢxᵢʹ
+```
+
+La varianza del residuo de la recuperación no es constante: los días de
+recuperación baja están más dispersos que los altos. Con errores clásicos los
+intervalos salen demasiado angostos justo donde importa. Correcto para un corte
+transversal —una comparación entre actividades, por ejemplo— donde nada
+relaciona una observación con la siguiente.
+
+**`vcov: 'hac'` — Newey–West con núcleo de Bartlett.**
+
+```
+Ω̂ = Γ̂₀ + Σ_{ℓ=1}^{L} (1 − ℓ/(L+1)) (Γ̂_ℓ + Γ̂_ℓʹ)
+Γ̂_ℓ = Σ_t u_t u_{t−ℓ} x_t x_{t−ℓ}ʹ
+```
+
+HC1 supone que cada observación aporta información propia. En una serie diaria
+eso es falso: lo que quedó fuera del modelo y es persistente —un bloque de
+entrenamiento, un resfriado, una racha de mal sueño— aparece en u_t y otra vez
+en u_{t+1}. El «tamaño de muestra efectivo» es entonces mucho menor que n, y HC1
+no lo sabe. HAC estima la varianza de largo plazo del score xᵢuᵢ en vez de su
+varianza contemporánea, que es la cantidad que realmente gobierna la dispersión
+del coeficiente.
+
+El núcleo de Bartlett no es decorativo: truncar la suma con pesos iguales puede
+dar un Ω̂ que no es semidefinido positivo, y por lo tanto una varianza negativa.
+El taper triangular no puede.
+
+`L` es el truncamiento de rezagos. Por omisión, la regla de Newey–West
+`floor(4·(n/100)^(2/9))` — 4 rezagos para 150 días, 5 para 300, 6 para 1000.
+
+**Los huecos cuentan como huecos.** Ω̂ se arma recorriendo pares de
+observaciones separadas por menos de `L` **en el tiempo**, no en posición del
+arreglo. Después de la eliminación listwise las filas ya no son consecutivas, y
+emparejar los dos días a lado y lado de una quincena sin datos metería en Ω̂ una
+correlación que los datos nunca mostraron. Por eso `ols` acepta `times`.
+
+#### Qué tan mal está HC1 acá, medido
+
+Cobertura empírica de un intervalo nominal al 95% sobre un proceso generado con
+regresor persistente (AR 0,8) y errores AR(ρ), 1000 réplicas por celda:
+
+| ρ    |   n | cobertura HC1 | cobertura HAC | SE_hac / SE_hc1 |
+| ---- | --: | ------------: | ------------: | --------------: |
+| 0,00 | 300 |         94,0% |         92,8% |           0,98× |
+| 0,30 | 300 |         86,4% |         91,8% |           1,19× |
+| 0,50 | 300 |         79,4% |         89,4% |           1,35× |
+| 0,70 | 300 |         70,4% |         87,0% |           1,55× |
+| 0,85 | 300 |         61,2% |         83,9% |           1,73× |
+
+Dos lecturas. La primera: con ρ = 0,7 un intervalo «al 95%» calculado con HC1
+falla tres de cada diez veces. La segunda, más importante, es que **la cobertura
+de HC1 no mejora con n** —69,0% con 150 días, 69,1% con 600— porque el problema
+no es falta de datos sino un estimador que converge al número equivocado. La de
+HAC sí mejora (83,9% → 87,0% → 89,4%), que es como se ve un estimador
+consistente.
+
+Devuelve coeficientes, errores estándar, estadísticos t, p-valores bilaterales
+contra t(n−k), intervalos al 95%, R², R² ajustado, la matriz de covarianzas,
+(XʹX)⁻¹, y `vcovType` y `bandwidth` para que el panel pueda decir cuál usó.
+
+**Filas con cualquier dato faltante se eliminan enteras** (listwise). Imputar
+inventaría la covarianza que el modelo mide.
+
+**Supuestos.** Para que un coeficiente signifique «el efecto de esta variable
+manteniendo las demás fijas» hace falta que las variables omitidas relevantes no
+estén correlacionadas con las incluidas. Es un supuesto fuerte y en general
+falso: el alcohol viene con el fin de semana, con acostarse tarde y con dormir
+menos. Controlar por lo que se puede medir acerca el número a lo que parece,
+pero no lo convierte en un experimento.
+
+Sobre el p-valor: con `hac` deja de suponer observaciones independientes, que
+era el supuesto que las series diarias rompen de entrada. Lo que **no** deja de
+suponer es que la muestra alcanza para estimar bien la varianza de largo plazo.
+La tabla de arriba lo muestra: aun con HAC la cobertura real ronda el 87–89% y
+no el 95%, porque el estimador es consistente pero sesgado hacia abajo en
+muestras finitas. Subir el ancho de banda no lo arregla —medido a ρ = 0,7 y
+n = 300: 87,0% con L = 5, 88,5% con L = 20, 86,9% con L = 40—; con L grande se
+cambia sesgo por varianza del propio Ω̂. **Un panel que escriba «IC 95%» sobre
+un ajuste HAC está escribiendo algo más cercano al 88%.** Es mucho mejor que el
+70% de HC1, y sigue sin ser lo que dice la etiqueta.
+
+### 6.2 Modelo de rezagos distribuidos — `distributedLag`
+
+```
+y_t = α + Σ_{k=minLag}^{K} β_k · x_{t−k} + controles_t + u_t
+```
+
+K configurable. `minLag` es 1 por omisión: por la convención de día del proyecto
+el score de recuperación es el número que viste en la mañana, así que el strain
+del mismo día calendario ocurrió después y no puede explicarlo.
+
+Reporta cada β_k con su intervalo al 95% —qué tan rápido llega el efecto y
+cuánto dura— y el **multiplicador acumulado** Σβ_k, que es la respuesta a un
+cambio sostenido durante toda la ventana. El error estándar del acumulado sale
+del **método delta**: para g(β) = Σβ_k el gradiente es un vector de unos, así
+que
+
+```
+Var(Σβ_k) = 1ᵀ V 1     sobre el bloque de rezagos de V
+```
+
+Sumar los errores estándar en cuadratura daría otro número y estaría mal: un
+driver autocorrelacionado produce coeficientes correlacionados entre sí, y esas
+covarianzas tienen que estar dentro de la banda. La implementación suma el
+bloque completo de rezagos de V, con sus términos fuera de la diagonal.
+
+**Este es el único estimador de la capa con un `vcov` por omisión, y es `hac`.**
+`ols` se niega a elegir porque no puede saber qué le están pasando; acá sí se
+sabe exactamente qué es: una serie diaria regresada contra su propio pasado
+reciente. En ese diseño los residuos quedan autocorrelacionados prácticamente
+por construcción, y HC1 reportaría bandas del orden de un tercio más angostas de
+lo que corresponde. Pedir HC1 acá tiene que ser un acto deliberado. El índice de
+día se le pasa a `ols` como `times`, así que una racha sin datos rompe la
+ventana de Bartlett en vez de cerrarse en silencio.
+
+**Qué supuesto queda vivo aun con HAC.** El más importante, y no es el de la
+varianza: **HAC corrige la inferencia, no la especificación.** Ensancha la banda
+alrededor del coeficiente que sea; no lo corrige. Si el modelo está mal
+especificado dinámicamente —el caso concreto acá es omitir el propio rezago de
+la recuperación, que es una serie muy persistente— entonces los rezagos del
+strain recogen parte de esa persistencia y los β_k están sesgados. HAC, frente a
+eso, no hace absolutamente nada: da un intervalo honesto alrededor de un número
+que no es el que se quería estimar. Un residuo autocorrelacionado es señal de
+que puede faltar dinámica en el modelo, y tratarlo solo como un problema de
+errores estándar es tapar el síntoma.
+
+Los otros dos, ya mencionados en §6.1, siguen en pie: la cobertura real de la
+banda ronda el 88% y no el 95%, y nada de esto vuelve causal a un dato
+observacional.
+
+**Supuestos.** Los de §6.1, más uno propio: la especificación asume que el
+efecto se agota en K días. Si el horizonte verdadero es más largo, lo que quede
+afuera se va al residuo y sesga el acumulado.
+
+### 6.3 Corrección por comparaciones múltiples — `benjaminiHochberg`
+
+Procedimiento step-up sobre el vector de p-valores de una familia:
+
+```
+q₍ᵢ₎ = mín sobre j ≥ i de  (m/j) · p₍ⱼ₎ ,  acotado a 1
+```
+
+El mínimo corrido desde arriba es lo que garantiza monotonía; sin él un p mayor
+podría salir con un q menor.
+
+Controla la **tasa de falsos descubrimientos**: q = 0,10 dice «de las que marqué,
+espero que una de cada diez sea ruido». Bonferroni controla otra cosa —la
+probabilidad de _un solo_ falso positivo en toda la familia— y con quince
+preguntas del diario es tan conservador que ningún efecto real sobrevive. Con
+quince pruebas a p < 0,05, un falso positivo es el resultado esperado, no mala
+suerte.
+
+Los p-valores faltantes pasan como `null` y **no cuentan en m**: una prueba que
+no se pudo correr no es una prueba que salió nula.
+
+**Supuesto.** El procedimiento controla la FDR bajo independencia o bajo
+dependencia positiva de los estadísticos. Las respuestas del diario están
+correlacionadas entre sí —quien tomó anoche también se acostó tarde— y esa
+dependencia es en general positiva, que es el caso favorable.
+
+### 6.4 Binscatter — `binscatter`
+
+Agrupa x en cuantiles de **igual número de observaciones** y devuelve, por
+grupo, la media de x, la media de y, el error estándar de la media y su
+intervalo.
+
+Dos años de datos diarios son setecientos puntos superpuestos en los que el ojo
+encuentra lo que ya esperaba. Veinte medias condicionales con barra de error
+muestran la forma de la relación sin imponerle una forma funcional y —esto es lo
+que una recta ajustada esconde— muestran dónde la relación deja de ser una
+recta.
+
+Bins de igual conteo y no de igual ancho, para que cada barra de error pese lo
+mismo. El costo: una variable con muchos empates (un booleano, un conteo
+redondeado) reparte valores idénticos entre bins vecinos; esas variables van a
+una comparación de grupos, no acá. Los bins con menos de `minPerBin`
+observaciones se descartan en vez de dibujarse sin error.
+
+### 6.5 Suavizador LOESS de grado 1 — `loess`
+
+En cada punto de una grilla, un ajuste **lineal** local sobre la fracción
+`bandwidth` de vecinos más cercanos, ponderado por el núcleo tricúbico
+w = (1 − (d/d_máx)³)³.
+
+Grado 1 y no grado 0 porque una media local está sesgada dondequiera que la
+curva tenga pendiente, y de forma más visible en los dos extremos, que es
+justamente donde alguien mira para preguntarse «¿sigue subiendo?». Una recta
+local no tiene ese sesgo: reproduce exactamente una relación lineal, con
+cualquier ancho de banda.
+
+El ancho de banda es toda la decisión editorial. Suficientemente chico y la
+curva traza el ruido; suficientemente grande y se vuelve la recta de mínimos
+cuadrados. Es un parámetro y no una constante precisamente para que el panel
+pueda decir cuál usó.
+
+### 6.6 CUSUM tabular de dos colas — `cusum`
+
+Sobre la serie estandarizada z = (x − centro) / escala:
+
+```
+C⁺ᵢ = máx(0, C⁺ᵢ₋₁ + zᵢ − k)      C⁻ᵢ = máx(0, C⁻ᵢ₋₁ − zᵢ − k)
+```
+
+Señal cuando cualquiera de los dos supera h. k es la holgura en desviaciones
+estándar —la mitad del salto que interesa detectar es la elección usual— y h el
+intervalo de decisión.
+
+Una media móvil responde «dónde está el nivel ahora»; CUSUM responde **«cuándo
+cambió»**, que es otra pregunta y la que vale la pena hacerle a una serie donde
+el valor diario es casi todo ruido. Al acumular excursiones pequeñas detecta una
+deriva de media sigma que ningún día suelto marcaría, y fecha el cruce en vez de
+dejar que alguien lo calcule a ojo sobre una línea suavizada.
+
+Los dos acumuladores **se reinician al disparar**. Sin eso, un solo cambio real
+deja la gráfica saturada durante meses y cada día siguiente parece una alarma
+nueva.
+
+`reference` define cuántos días iniciales fijan la línea base. Por omisión es la
+serie entera, que pregunta «¿qué días se salen del periodo como un todo?»; con
+una ventana que se sabe normal, pregunta «¿algo cambió desde entonces?».
+
+Los días sin dato no se tocan: los acumuladores pasan de largo en vez de recibir
+un cero, que contaría un hueco como evidencia de control.
+
+**Supuesto.** Calibrar k y h en desviaciones estándar supone observaciones
+independientes y aproximadamente normales. La recuperación diaria está
+autocorrelacionada, así que la tasa real de falsas alarmas es más alta que la
+nominal. Léase como detector de cambios, no como prueba.
+
+### 6.7 Puntos de cambio en media — `changePoints`
+
+Segmentación binaria: sobre un segmento se busca el corte que minimiza la suma
+de cuadrados agrupada de las dos mitades, se acepta si el BIC mejora, y se
+recurre en cada mitad.
+
+```
+ΔBIC = n · ln(SSE_corte / SSE_entero) + 2 · ln(n)   ,  se acepta si es negativo
+```
+
+La penalización cobra **dos** parámetros por quiebre —la nueva media _y_ la
+ubicación— porque el punto de corte también se estima de los datos. Cobrando
+solo la media el criterio es demasiado fácil de satisfacer y una serie
+estacionaria vuelve partida en una docena de regímenes falsos.
+
+Corre solo sobre los días observados y reporta la posición en el índice
+original, así que una racha sin datos ni esconde un quiebre ni inventa uno.
+
+**Supuesto y límite.** El modelo busca **escalones**, no pendientes. Una deriva
+lenta no tiene escalón y el algoritmo la aproxima con una escalera; el subtítulo
+del panel tiene que decirlo, porque leer esas fechas como «el día que cambió
+algo» sería inventar un evento que no ocurrió.
+
+### 6.9 Combinaciones y razones de coeficientes — `linearCombination`, `ratio`
+
+Dos cantidades que se derivan de un ajuste ya hecho y necesitan su propio error
+estándar, porque los coeficientes de una misma regresión casi nunca son
+independientes entre sí.
+
+**Combinación lineal.** Para cualquier vector de pesos w,
+
+```
+Var(wʹβ) = wʹ V w
+```
+
+Los términos fuera de la diagonal son el punto. Sumar errores estándar en
+cuadratura responde una pregunta que nadie hizo. `distributedLag` usa esta misma
+identidad para el multiplicador acumulado, con w un vector de unos.
+
+**Razón, por método delta.** Para g(β) = ±βₐ/β_b el gradiente es
+(±1/β_b, ∓βₐ/β_b²), de modo que
+
+```
+Var(g) = (∂g/∂βₐ)² V_aa + (∂g/∂β_b)² V_bb + 2 (∂g/∂βₐ)(∂g/∂β_b) V_ab
+```
+
+Es lo que sostiene la tasa marginal de sustitución del panel de resumen:
+−β(strain)/β(sueño), las horas de sueño de más que compensan una unidad de
+strain. **Dividir dos intervalos de confianza daría otro número y estaría mal**;
+el intervalo de una razón no es la razón de los intervalos.
+
+**Cuándo se apaga, y por qué no es prudencia.** `ratio` se niega a devolver un
+número cuando el intervalo del denominador cubre el cero. Una razón cuyo
+denominador puede ser cero **no tiene cota finita**: el conjunto de confianza
+honesto es toda la recta, o dos semirrectas disjuntas. Es el problema de
+Fieller. El método delta, que solo mira una linealización local, devolvería
+igual una banda simétrica y angosta, y esa banda sería una invención. No hay
+tamaño de muestra que lo rescate: la cantidad simplemente no está identificada.
+
+Incluso cuando sí lo está, el método delta es una aproximación de primer orden;
+es fiable mientras el denominador esté cómodamente lejos de cero, y se degrada a
+medida que se acerca. Para un caso límite lo correcto sería un intervalo de
+Fieller, no éste.
+
+### 6.8 Periodograma de Lomb–Scargle — `lombScargle`
+
+```
+P(ω) = 1/(2σ²) · [ (Σ dᵢ cos ω(tᵢ−τ))² / Σ cos²ω(tᵢ−τ)
+                 + (Σ dᵢ sin ω(tᵢ−τ))² / Σ sin²ω(tᵢ−τ) ]
+```
+
+con d = y − ȳ y el desfase τ fijado por tan 2ωτ = Σ sin 2ωtᵢ / Σ cos 2ωtᵢ. Ese
+desfase es lo que vuelve el estimador equivalente a ajustar una sinusoide por
+mínimos cuadrados en cada frecuencia, y es la razón de que funcione sobre datos
+con huecos y muestreo irregular —donde una FFT exigiría rellenar los huecos, y
+rellenarlos es exactamente cómo se fabrica un ciclo semanal que no existe.
+
+Normalización de Scargle: bajo ruido blanco la potencia en una frecuencia es
+exponencial de media 1, de modo que Pr(P > z) = e⁻ᶻ y la probabilidad de falsa
+alarma sobre M frecuencias independientes es 1 − (1 − e⁻ᶻ)^M. M sale de la
+fórmula empírica de Horne & Baliunas sobre N y **no** del tamaño de la grilla,
+para que sobremuestrear compre resolución sin inflar la significancia.
+
+Por omisión busca periodos entre 2 días (Nyquist del muestreo diario) y la mitad
+del rango observado: un solo ciclo no es evidencia de un ciclo.
+
+**Supuesto.** Solo se le quita la media. Una serie con tendencia filtra potencia
+hacia los periodos largos, así que hay que quitarle la tendencia antes de
+preguntarle qué ciclos tiene tu HRV.

@@ -23,7 +23,9 @@ Ordenado por relación valor/esfuerzo. Cada punto está especificado en
 6. **Regresión multivariada de hábitos** (§4.3) y la **interacción
    alcohol × sueño** (§4.4). Acá está el foso del proyecto: nadie más lo hace, y
    es lo que convierte correlaciones sueltas en algo que de verdad separa
-   efectos. Mínimos cuadrados por ecuaciones normales, sin librería nueva.
+   efectos. El motor ya está construido y probado (§6.1, §6.3) junto con
+   `CoefficientPlot`; lo que falta es armar la matriz de diseño en `metrics.ts`
+   y montar el panel.
 7. **Sleep Regularity Index** (§2.4). Requiere reconstruir el estado minuto a
    minuto desde los bloques de sueño. Es el indicador de regularidad con más
    respaldo académico y WHOOP no lo muestra.
