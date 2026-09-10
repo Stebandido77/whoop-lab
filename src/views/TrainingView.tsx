@@ -1,9 +1,17 @@
 import { useMemo } from 'react';
-import { BinScatterChart, HBarChart, HistogramChart, IrfChart, TimeSeriesChart } from '@/charts';
+import {
+  ActivityHeatmap,
+  BinScatterChart,
+  HBarChart,
+  HistogramChart,
+  IrfChart,
+  TimeSeriesChart,
+} from '@/charts';
 import { NotEnough, Panel } from '@/components';
 import { f0, f1, f2, hoursMinutes, pct, pRelation, signed } from '@/lib/format';
 import { useMessages } from '@/lib/i18n';
 import {
+  activityWeekLoad,
   doseResponse,
   strainDistribution,
   strainImpulseResponse,
@@ -22,6 +30,7 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
   const irf = useMemo(() => strainImpulseResponse(days), [days]);
   const dose = useMemo(() => doseResponse(days, 'strain', 'recoveryNext'), [days]);
   const distribution = useMemo(() => strainDistribution(days), [days]);
+  const weekLoad = useMemo(() => activityWeekLoad(days), [days]);
   const weeks = byWeek(days, ['workoutMinutes', 'workoutCount', 'strain']).map((w) => ({
     ...w,
     totalMinutes:
@@ -145,6 +154,24 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
           </>
         ) : (
           <NotEnough state={dose} what={m.training.doseWhat} />
+        )}
+      </Panel>
+
+      <Panel span={12} title={m.training.heatmapTitle} subtitle={m.training.heatmapSubtitle}>
+        {weekLoad.ok ? (
+          <>
+            <ActivityHeatmap data={weekLoad} />
+            {weekLoad.hidden.activities > 0 && (
+              <p className="subtitle" style={{ margin: '10px 0 0' }}>
+                {m.training.heatmapHidden(
+                  f0(weekLoad.hidden.activities),
+                  f1(weekLoad.hidden.strain),
+                )}
+              </p>
+            )}
+          </>
+        ) : (
+          <NotEnough state={weekLoad} what={m.training.heatmapWhat} />
         )}
       </Panel>
 

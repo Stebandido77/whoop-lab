@@ -1,3 +1,4 @@
+import { quantile } from '../stats';
 import { insufficient, isNum, type Insufficient, type Num } from './types';
 
 /* ------------------------------ histogram --------------------------------- */
@@ -17,17 +18,11 @@ export interface HistogramOptions {
 
 const finite = (values: Num[]): number[] => values.filter(isNum);
 
-const quantile = (sorted: number[], p: number): number => {
-  if (!sorted.length) return NaN;
-  const pos = (sorted.length - 1) * p;
-  const lo = Math.floor(pos);
-  const hi = Math.ceil(pos);
-  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
-};
-
 export const interquartileRange = (values: Num[]): number => {
-  const sorted = finite(values).sort((a, b) => a - b);
-  return sorted.length ? quantile(sorted, 0.75) - quantile(sorted, 0.25) : 0;
+  const data = finite(values);
+  const q3 = quantile(data, 0.75);
+  const q1 = quantile(data, 0.25);
+  return q3 != null && q1 != null ? q3 - q1 : 0;
 };
 
 const standardDeviation = (values: number[]): number => {

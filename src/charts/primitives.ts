@@ -149,6 +149,31 @@ export function tooltipStyle(state: TooltipState, boxWidth: number): React.CSSPr
   return { left, top: Math.max(0, state.y - 10) };
 }
 
+/**
+ * The palette for colouring a set of unordered categories — activity types, so
+ * far. Ordered so that neighbours in the list are far apart in hue, because a
+ * legend is read by matching a swatch and not by remembering an order.
+ *
+ * Eight and then a catch-all, which is a real limit rather than a placeholder:
+ * past eight, nobody matches a swatch to a legend entry reliably, and the honest
+ * move is to say «and four more» instead of shipping four colours that look the
+ * same. Callers rank the categories first, so the ninth is always the smallest.
+ */
+export const CATEGORICAL_TOKENS = [
+  '--strain',
+  '--hi',
+  '--hrv',
+  '--mid',
+  '--sleep',
+  '--rem',
+  '--lo',
+  '--deep',
+] as const;
+
+/** Everything past the palette shares one muted token. */
+export const categoricalToken = (index: number): string =>
+  index >= 0 && index < CATEGORICAL_TOKENS.length ? CATEGORICAL_TOKENS[index] : '--muted';
+
 export const RECOVERY_BANDS = { low: 34, high: 67 } as const;
 
 /** WHOOP's own recovery bands: red below 34, yellow to 66, green from 67. */

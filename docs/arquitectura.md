@@ -184,16 +184,31 @@ dibujan perfectos y son mentira.
 Componentes SVG propios. `d3-scale` y `d3-shape` ponen escalas y trayectorias;
 todo lo demás (ejes, grilla, tooltip, colores, responsive) es del componente.
 
-Dos detalles que hay que respetar:
+Tres detalles que hay que respetar:
 
 - **Los colores se resuelven, no se escriben.** Los atributos de presentación SVG
   no aceptan `var()` de forma confiable, así que `useResolvedColor` lee el valor
   computado del token y lo cachea, e invalida el caché cuando cambia el esquema
-  del sistema.
+  del sistema. Para categorías sin orden —tipos de actividad— está
+  `CATEGORICAL_TOKENS` en `primitives.ts`: ocho tokens ordenados para que dos
+  vecinos de la lista queden lejos en tono, y un token apagado para todo lo que
+  pase de ocho. El corte en ocho es real y no un marcador: pasando de ahí nadie
+  empareja un cuadrito con su entrada de leyenda, y lo honesto es escribir «otras
+  cuatro» en vez de repartir cuatro colores que se ven iguales. Quien llama ordena
+  las categorías primero, así que la novena siempre es la más pequeña.
 - **El ancho se mide con `ResizeObserver`.** Un `viewBox` calculado con un ancho
   equivocado produce letterboxing: el SVG se escala para caber y queda flotando
   en el centro del panel. `useElementWidth` no repinta por cambios menores a 3 px
   para no entrar en bucles.
+- **El elemento medido tiene que ser el mismo nodo en todos los estados.** El
+  observador se engancha una sola vez, en un efecto con dependencias vacías. Si el
+  retorno temprano de «todavía no sé mi ancho» devuelve un elemento distinto del
+  que devuelve el render real, React monta otro nodo, el observador se queda
+  midiendo el que quedó desconectado y el ancho nunca se corrige. Pasó en
+  `CircadianClock`: el marcador de posición era el contenedor entero y el dibujo
+  real una columna de 560 px, así que el `viewBox` se quedó en 1170 y el SVG se
+  pintó a la mitad de tamaño. El arreglo es que el `ref` no cambie de sitio nunca;
+  lo que cambia es lo que va adentro.
 
 El eje X es categórico, no temporal: los días se reparten en bandas iguales. Un
 hueco en el export se lee como hueco, no estira las barras vecinas.
@@ -221,6 +236,17 @@ separó de cero.
   bordes de los grupos, y la curva es suave pero su forma es una elección de
   ancho de banda. Las barras se dibujan como densidad y no como conteo para que
   la curva pueda compartirles el eje sin una segunda escala que malinterpretar.
+- `CircadianClock` — polar de 24 horas con la ventana de sueño, cada sesión en su
+  hora de inicio y un anillo de recuperación por hora de despertar. Es la única
+  gráfica del proyecto con su leyenda **al lado** y no debajo: la esfera es
+  cuadrada, así que en un panel ancho dejaría dos columnas vacías, y una leyenda
+  bajo un círculo queda lejos de la marca que explica. Los radios de cada anillo
+  están en una sola constante (`RING`), de modo que mover un anillo es cambiar un
+  número.
+- `ActivityHeatmap` — actividad contra semana ISO, sombreada por el strain
+  acumulado. Las celdas conservan su tamaño y la rejilla hace scroll, por la misma
+  razón que el calendario: un año exprimido en el ancho del panel es una fila de
+  astillas de un píxel.
 - `SpectrumChart` — periodograma con eje x logarítmico en el periodo y la línea
   de falsa alarma. El eje es logarítmico porque ahí la resolución del estimador
   es aproximadamente uniforme; en lineal, todo ciclo más corto que una quincena

@@ -10,3 +10,5 @@ export * from './IrfChart';
 export * from './BinScatterChart';
 export * from './SpectrumChart';
 export * from './HistogramChart';
+export * from './CircadianClock';
+export * from './ActivityHeatmap';

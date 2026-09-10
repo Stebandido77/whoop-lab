@@ -180,6 +180,28 @@ condición física a igual esfuerzo percibido.
 
 ---
 
+### 3.8 Carga por actividad y por semana — implementado
+
+Una fila por tipo de actividad, una columna por semana ISO, y el valor de la
+celda es la **suma** del `Activity Strain` de esa disciplina en esa semana.
+
+Suma y no media a propósito: la pregunta que contesta el panel es cuánta carga
+metió cada disciplina, y una media por sesión borra la diferencia entre una
+sesión y cinco. La media por sesión ya está en §3.6.
+
+Las semanas se rellenan seguidas desde el primer lunes del rango hasta el
+último, aunque no haya nada en medio. Comprimir las semanas vacías dejaría dos
+bloques de entrenamiento separados por tres meses pegados uno al lado del otro.
+
+Una celda sin ninguna sesión de esa actividad es `null`, no cero, y se dibuja
+vacía. Es la regla 3 del proyecto aplicada a una rejilla: «no hice esto» y «hice
+esto y no valió nada» son afirmaciones distintas, y en una rejilla tan dispersa
+como ésta casi todas las celdas son la primera.
+
+Se muestran las doce actividades con más strain acumulado. Lo que no cabe se
+reporta como conteo y total —«3 actividades más, 42 de strain entre todas»— en
+vez de plegarse en una fila «otros», que inventaría una categoría que no existe.
+
 ## 4. Hábitos (diario)
 
 ### 4.1 Efecto univariado — implementado
@@ -250,6 +272,55 @@ Descargar cualquier panel como SVG y como PNG. Como todo se dibuja en SVG propio
 serializar el nodo y pasarlo por un canvas es directo.
 
 ---
+
+### 5.5 Reloj circadiano — implementado
+
+Un gráfico polar de 24 horas donde el ángulo es la hora del día, con midnight
+arriba y el día corriendo en el sentido de las agujas. Tres lecturas comparten
+ese eje, y compartirlo es todo el punto: por separado ya están en el tablero, y
+por separado ninguna contesta dónde cae la carga del día.
+
+**La ventana de sueño.** Un arco de la mediana de `Sleep onset` a la mediana de
+`Wake onset`, con cuñas más oscuras sobre el rango intercuartil de cada extremo.
+Las cuñas son el ancho honesto de la afirmación: la mitad central de las noches
+cae ahí dentro.
+
+Los cuartiles se calculan sobre la hora de acostarse **ya desplazada** más allá
+de las 24:00 —la convención de `bedtime` en `model.ts`— y solo después se
+envuelven sobre la esfera del reloj. Ese es justamente el motivo de que el campo
+esté desplazado: sin eso, una noche a las 23:50 y otra a las 00:10 promedian a
+mediodía.
+
+El número del centro es el ancho de ese arco, de mediana a mediana, y **no** la
+mediana de las duraciones. Son dos cantidades distintas y solo la primera es la
+que el dibujo contiene; llamarla «duración mediana del sueño» sería describir la
+figura con un estadístico que la figura no tiene.
+
+**Las sesiones.** Un radio por entrenamiento, en el minuto en que empezó
+(`Start time` de `workouts.csv`), tan largo como su `Activity Strain` y coloreado
+por disciplina. No hay agregación: son las sesiones, una por una. Donde se
+amontonan están las horas a las que la persona entrena, que es una lectura que
+ninguna serie temporal da.
+
+Una sesión sin hora de inicio o sin strain no se dibuja. Ponerla a medianoche o
+a cero la metería en la lectura como si fuera un dato.
+
+**El anillo exterior.** Media de recuperación de las mañanas que despertaron en
+cada hora, comparada con la media del rango: verde por encima, rojo por debajo, y
+la opacidad crece con la distancia. Una hora con menos de cinco mañanas se dibuja
+**punteada y sin relleno**, porque «no hay evidencia» y «no hay diferencia» no
+pueden verse igual.
+
+**Lo que el anillo no es.** Es descriptivo y no causal, y el panel lo dice: las
+mañanas tempranas no son mañanas al azar. Suelen venir con acostarse a la misma
+hora y por lo tanto con dormir menos, así que lo que se ve ahí incluye el efecto
+de la duración y no solo el de la hora. Separarlos es una regresión —la del
+explorador, §7— y no un promedio por grupo.
+
+**De dónde sale cada cosa.** `Sleep onset`, `Wake onset`, el `Start time` y el
+`Activity Strain` de cada actividad, y el `Recovery score`. Todas son columnas
+que el export trae. No hay modelo, no hay suavizado y no hay imputación en
+ningún punto de este panel.
 
 ## 6. Métodos econométricos
 

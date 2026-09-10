@@ -6,7 +6,7 @@
 
 **[Abrir la demo →](https://USER.github.io/whoop-lab/?demo=1)** · [Read this in English](README.md)
 
-![Vista general de WHOOP Lab](docs/img/overview-light.es.png)
+![Tu día en un reloj de 24 horas](docs/img/clock-light.es.png)
 
 </div>
 
@@ -43,6 +43,13 @@ ninguna hace:
   `sueño.csv` y `entrenamientos.csv` con todos los encabezados traducidos. El
   parser compara subcadenas del encabezado sin acentos en vez de nombres exactos,
   así que entran las dos variantes sin renombrar archivos.
+- **El día entero en una esfera de 24 horas.** La ventana de sueño como arco, con
+  el rango intercuartil de los dos extremos; cada entreno como un radio en el
+  minuto en que empezó, tan largo como su strain y coloreado por disciplina; y un
+  anillo exterior con la recuperación según la hora de despertar. Tres lecturas que
+  el resto del tablero solo muestra por separado, y ninguna contesta dónde cae la
+  carga del día hasta que comparten eje. Cada marca es una fila del export: sin
+  modelo, sin suavizado y sin rellenar nada.
 - **Un explorador de modelos que lleva la cuenta de cuánto buscaste.** Arma
   cualquier regresión con los campos del registro diario —dependiente, regresores,
   controles, un rezago por término— y córrela por el mismo motor HAC que todo lo
@@ -77,6 +84,10 @@ navegador con relaciones reales incorporadas.
 | **Sueño.** Dónde las horas de más dejan de comprar recuperación.         | **Modo oscuro**, siguiendo al sistema o a tu elección.            |
 | ![Explorador de modelos](docs/img/models.es.png)                         | ![Distribución del strain](docs/img/training-distribution.es.png) |
 | **Modelos.** La regresión que quieras, con la búsqueda contada.          | **Distribución.** Dos modas, nombradas y puestas a prueba.        |
+| ![Vista general](docs/img/overview-light.es.png)                         | ![El mismo reloj en oscuro](docs/img/clock-dark.es.png)           |
+| **Resumen.** Líneas base, tarjetas y las elasticidades ajustadas.        | **La esfera en modo oscuro.**                                     |
+
+![Qué disciplinas entran y salen](docs/img/activity-heatmap.es.png)
 
 ## Privacidad
 
@@ -185,7 +196,8 @@ src/
   lib/i18n/      los catálogos de mensajes en español e inglés, y el hook
   lib/           estadística, formato, métricas derivadas, demo, storage
   charts/        TimeSeries, StackedBar, Scatter, BinScatter, Coefficient,
-                 Irf, Spectrum, Histogram, HBar, CalendarHeatmap, Sparkline
+                 Irf, Spectrum, Histogram, CircadianClock, ActivityHeatmap,
+                 HBar, CalendarHeatmap, Sparkline
   components/    Panel, KpiCard, Legend, Segmented, ImportView, ViewSkeleton
   views/         un archivo por pestaña, cada uno su propio chunk diferido
   state/         store de zustand y el selector de rango

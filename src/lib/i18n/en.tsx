@@ -102,6 +102,37 @@ export const en: Messages = {
     power: 'Power',
     aboveThreshold: 'Clears the threshold',
     belowThreshold: 'Below the threshold',
+    clock: {
+      bedtime: 'Bedtime',
+      wake: 'Wake time',
+      median: (value: string) => `Median ${value}`,
+      iqr: (q1: string, q3: string) => `Half the nights between ${q1} and ${q3}`,
+      nights: (n: string) => `${n} nights with data`,
+      startedAt: 'Started at',
+      strain: 'Strain',
+      wokeAt: (hour: string) => `Woke between ${hour} and the next hour`,
+      meanRecovery: 'Mean recovery',
+      againstRange: (delta: string) => `${delta} against your range mean`,
+      mornings: (n: string) => `${n} mornings`,
+      tooFewMornings: (n: string) =>
+        `Only ${n} mornings: too few to average, so the segment is left empty.`,
+      centreLabel: 'Typical sleep window',
+      keyNight: 'The night',
+      keySessions: 'Sessions',
+      keyRing: 'Outer ring',
+      legendAbove: 'Above your mean',
+      legendBelow: 'Below your mean',
+      legendTooFew: 'Too few mornings',
+      legendSleep: 'Sleep window (median and quartiles)',
+      legendOther: (n: string) => `${n} more`,
+    },
+    heatmap: {
+      weekOf: (week: string) => `Week of ${week}`,
+      strain: 'Accumulated strain',
+      sessions: (n: string) => `${n} ${n === '1' ? 'session' : 'sessions'}`,
+      noSession: 'no session',
+      scale: 'Strain that week:',
+    },
     coefficientLegend: (alpha: string): ReactNode => (
       <>
         Filled point and <b>*</b>: significant at q ≤ {alpha}% after Benjamini–Hochberg. The bar is
@@ -173,6 +204,29 @@ export const en: Messages = {
     correlation: (r: string, n: string): ReactNode => (
       <>
         Correlation r = <b>{r}</b> over {n} days.
+      </>
+    ),
+    clockTitle: 'Your day, on a 24-hour clock',
+    clockSubtitle: (
+      <>
+        Three readings of one axis — the hour of the day — that the rest of the dashboard only ever
+        shows separately. The band is the sleep window: the arc runs from your median bedtime to
+        your median wake time, and the darker wedges cover the middle half of the nights, which is
+        the honest width of the claim. Each spoke is <b>one session</b> at the minute it began, as
+        long as its strain and coloured by discipline; where they bunch up are the hours you train.
+        The outer ring is the mean recovery of the mornings that woke in that hour, against your
+        range mean. All of it comes off columns the export ships — sleep onset and wake, each
+        activity's start time, strain and the score. Nothing here is modelled and nothing is filled
+        in.
+      </>
+    ),
+    clockWhat: 'the circadian clock',
+    clockRingCaveat: (mean: string): ReactNode => (
+      <>
+        The ring is <b>descriptive, not causal</b>. Early mornings are not random mornings: they
+        tend to come with going to bed at the same hour and therefore with less sleep, so what shows
+        there includes the effect of duration and not only of the hour. Separating the two takes the
+        regression in the models tab. Your range mean is {mean}.
       </>
     ),
     elasticitiesTitle: 'What each thing is worth, in recovery points',
@@ -450,6 +504,19 @@ export const en: Messages = {
     doseX: 'Strain that day',
     doseY: 'Next-day recovery',
     doseWhat: 'the dose–response curve',
+    heatmapTitle: 'Which disciplines come and go',
+    heatmapSubtitle: (
+      <>
+        One row per activity, one column per week, and the colour is the strain that discipline
+        accumulated that week. It is what no other panel shows: the strain series adds them all
+        together and the activity table flattens the whole range into one mean, so a block that ends
+        in March and one that starts in April look identical in both. Here they are two blocks. The
+        weeks run contiguously from the first to the last, so a month off reads as a month off.
+      </>
+    ),
+    heatmapWhat: 'the activity load map',
+    heatmapHidden: (activities: string, strain: string) =>
+      `${activities} more activities did not fit the map, worth ${strain} of strain between them.`,
     acwrTitle: 'Acute load against chronic load',
     acwrSubtitle:
       '7-day mean strain over the 28-day mean. Above 1.3 the load is rising faster than you absorb it.',

@@ -1,11 +1,18 @@
 import { useMemo } from 'react';
-import { BinScatterChart, CalendarHeatmap, recoveryToken, TimeSeriesChart } from '@/charts';
+import {
+  BinScatterChart,
+  CalendarHeatmap,
+  CircadianClock,
+  recoveryToken,
+  TimeSeriesChart,
+} from '@/charts';
 import { KpiCard, Legend, NotEnough, Panel } from '@/components';
 import { f0, f1, f2, fmtDayLong, hoursMinutes, pct, signed, weekdayName } from '@/lib/format';
 import type { RatioProblem } from '@/lib/econ';
 import { useMessages, type Messages } from '@/lib/i18n';
 import {
   adjustedHabitEffects,
+  circadianClock,
   column,
   doseResponse,
   periodValue,
@@ -36,6 +43,7 @@ export function OverviewView({
   const sleep = periodValue(days, previous, 'sleepHours');
   const strainVsNext = pearson(column(days, 'strain'), column(days, 'recoveryNext'));
   const strainDose = useMemo(() => doseResponse(days, 'strain', 'recoveryNext'), [days]);
+  const clock = useMemo(() => circadianClock(days), [days]);
 
   return (
     <div className="grid">
@@ -145,6 +153,19 @@ export function OverviewView({
           trendColor="--sleep"
         />
       </div>
+
+      <Panel span={12} title={m.overview.clockTitle} subtitle={m.overview.clockSubtitle}>
+        {clock.ok ? (
+          <>
+            <CircadianClock data={clock} />
+            <p className="callout" style={{ margin: '12px 0 0' }}>
+              {m.overview.clockRingCaveat(pct(clock.meanRecovery))}
+            </p>
+          </>
+        ) : (
+          <NotEnough state={clock} what={m.overview.clockWhat} />
+        )}
+      </Panel>
 
       <Panel span={12} title={m.overview.calendarTitle} subtitle={m.overview.calendarSubtitle}>
         <CalendarHeatmap

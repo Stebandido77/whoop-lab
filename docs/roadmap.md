@@ -58,6 +58,7 @@ Ordenado por relación valor/esfuerzo. Cada punto está especificado en
   huecos en el soporte de x en los paneles de dosis y respuesta.
 - **Explorador de modelos** (§7) con familia acumulada de Benjamini–Hochberg y
   presets en IndexedDB.
+- **Reloj circadiano** (§5.5) y **mapa de carga por actividad y semana** (§3.8).
 
 ## Deuda técnica conocida
 

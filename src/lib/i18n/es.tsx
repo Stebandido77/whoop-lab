@@ -108,6 +108,37 @@ export const es = {
     power: 'Potencia',
     aboveThreshold: 'Supera el umbral',
     belowThreshold: 'Por debajo del umbral',
+    clock: {
+      bedtime: 'Hora de acostarse',
+      wake: 'Hora de levantarse',
+      median: (value: string) => `Mediana ${value}`,
+      iqr: (q1: string, q3: string) => `La mitad de las noches entre ${q1} y ${q3}`,
+      nights: (n: string) => `${n} noches con dato`,
+      startedAt: 'Empezó a las',
+      strain: 'Strain',
+      wokeAt: (hour: string) => `Despertaste entre las ${hour} y la hora siguiente`,
+      meanRecovery: 'Recuperación media',
+      againstRange: (delta: string) => `${delta} frente a tu media del rango`,
+      mornings: (n: string) => `${n} mañanas`,
+      tooFewMornings: (n: string) =>
+        `Solo ${n} mañanas: muy pocas para promediar, así que la casilla queda vacía.`,
+      centreLabel: 'Ventana típica de sueño',
+      keyNight: 'La noche',
+      keySessions: 'Sesiones',
+      keyRing: 'Anillo exterior',
+      legendAbove: 'Por encima de tu media',
+      legendBelow: 'Por debajo de tu media',
+      legendTooFew: 'Muy pocas mañanas',
+      legendSleep: 'Ventana de sueño (mediana y cuartiles)',
+      legendOther: (n: string) => `otras ${n}`,
+    },
+    heatmap: {
+      weekOf: (week: string) => `Semana del ${week}`,
+      strain: 'Strain acumulado',
+      sessions: (n: string) => `${n} ${n === '1' ? 'sesión' : 'sesiones'}`,
+      noSession: 'sin sesión',
+      scale: 'Strain de la semana:',
+    },
     coefficientLegend: (alpha: string): ReactNode => (
       <>
         Punto lleno y <b>*</b>: significativo con q ≤ {alpha}% tras Benjamini–Hochberg. La barra es
@@ -181,6 +212,29 @@ export const es = {
     correlation: (r: string, n: string): ReactNode => (
       <>
         Correlación r = <b>{r}</b> sobre {n} días.
+      </>
+    ),
+    clockTitle: 'Tu día, en un reloj de 24 horas',
+    clockSubtitle: (
+      <>
+        Tres lecturas del mismo eje —la hora del día— que el resto del tablero solo muestra por
+        separado. La banda es la ventana de sueño: el arco va de la mediana de acostarte a la
+        mediana de levantarte, y las cuñas más oscuras cubren la mitad central de las noches, que es
+        el ancho honesto de la afirmación. Cada radio es <b>una sesión</b> en el minuto en que
+        empezó, tan largo como su strain y coloreado por disciplina; donde se amontonan están las
+        horas a las que entrenas. El anillo exterior es la recuperación media de las mañanas que
+        despertaron en esa hora, comparada con tu media del rango. Todo sale de columnas que el
+        export trae —inicio y fin del sueño, hora de inicio de cada actividad, strain y score—: acá
+        no se modela ni se rellena nada.
+      </>
+    ),
+    clockWhat: 'el reloj circadiano',
+    clockRingCaveat: (mean: string): ReactNode => (
+      <>
+        El anillo es <b>descriptivo, no causal</b>. Las mañanas tempranas no son mañanas al azar:
+        suelen venir con acostarse a la misma hora y, por lo tanto, con dormir menos, así que lo que
+        se ve ahí incluye el efecto de la duración y no solo el de la hora. Para separarlos hace
+        falta la regresión de la pestaña de modelos. La media del rango es {mean}.
       </>
     ),
     elasticitiesTitle: 'Cuánto vale, en puntos de recuperación, cada cosa',
@@ -456,6 +510,20 @@ export const es = {
     doseX: 'Strain del día',
     doseY: 'Recuperación al día siguiente',
     doseWhat: 'la curva de dosis y respuesta',
+    heatmapTitle: 'Qué disciplinas entran y salen',
+    heatmapSubtitle: (
+      <>
+        Una fila por actividad, una columna por semana, y el color es el strain que esa disciplina
+        acumuló esa semana. Es lo que ningún otro panel muestra: la serie de strain las suma todas y
+        la tabla de actividades aplana el rango entero en una media, así que un bloque que termina
+        en marzo y uno que empieza en abril se ven idénticos en las dos. Acá son dos bloques. Las
+        semanas van seguidas, de la primera a la última, para que un mes sin entrenar se lea como un
+        mes sin entrenar.
+      </>
+    ),
+    heatmapWhat: 'el mapa de carga por actividad',
+    heatmapHidden: (activities: string, strain: string) =>
+      `${activities} actividades más quedaron fuera del mapa, con ${strain} de strain entre todas.`,
     acwrTitle: 'Carga aguda contra carga crónica',
     acwrSubtitle:
       'Media de strain a 7 días sobre la de 28 días. Por encima de 1,3 la carga sube más rápido de lo que la aguantas.',

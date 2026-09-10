@@ -10,7 +10,7 @@
 
 **[Open the live demo →](https://USER.github.io/whoop-lab/?demo=1)** · [Léeme en español](README.es.md)
 
-![WHOOP Lab overview](docs/img/overview-light.png)
+![Your day on a 24-hour clock](docs/img/clock-light.png)
 
 </div>
 
@@ -43,6 +43,13 @@ them do:
   and `entrenamientos.csv` with every header translated. The parser matches
   accent-folded substrings of the header rather than exact names, so both come in
   without renaming anything.
+- **The whole day on one 24-hour dial.** The sleep window as an arc with the
+  quartile spread of both ends, every workout as a spoke at the minute it began —
+  as long as its strain, coloured by discipline — and an outer ring of recovery by
+  the hour you woke. Three readings that the rest of the dashboard only shows
+  separately, and none of them can answer where the day's load actually sits until
+  they share an axis. Every mark is one row of the export: no model, no smoothing,
+  nothing filled in.
 - **A model explorer that counts how much you searched.** Build any regression
   out of the day record — dependent, regressors, controls, a lag per term — and it
   runs through the same HAC engine as everything else. The part no other tool has:
@@ -77,6 +84,10 @@ browser with real relationships baked in.
 | **Sleep.** Where extra hours stop buying recovery.             | **Dark mode**, following your system or your choice.       |
 | ![Model explorer](docs/img/models.png)                         | ![Strain distribution](docs/img/training-distribution.png) |
 | **Models.** Any regression you like, with the search counted.  | **Distribution.** Two modes, named and tested.             |
+| ![Overview](docs/img/overview-light.png)                       | ![The same dial in dark mode](docs/img/clock-dark.png)     |
+| **Overview.** Baselines, KPIs and the adjusted elasticities.   | **The dial in dark mode.**                                 |
+
+![Which disciplines come and go](docs/img/activity-heatmap.png)
 
 ## Privacy
 
@@ -182,7 +193,8 @@ src/
   lib/i18n/      the English and Spanish message catalogues, and the hook
   lib/           stats, formatting, derived metrics, demo data, storage
   charts/        TimeSeries, StackedBar, Scatter, BinScatter, Coefficient,
-                 Irf, Spectrum, Histogram, HBar, CalendarHeatmap, Sparkline
+                 Irf, Spectrum, Histogram, CircadianClock, ActivityHeatmap,
+                 HBar, CalendarHeatmap, Sparkline
   components/    Panel, KpiCard, Legend, Segmented, ImportView, ViewSkeleton
   views/         one file per tab, each its own lazy chunk
   state/         zustand store and the range/window selector

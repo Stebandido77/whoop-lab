@@ -24,7 +24,8 @@ import {
   type RatioResult,
   type SupportGaps,
 } from './econ';
-import { mean, pearson, welchT, type Correlation } from './stats';
+import { dayKey } from './format';
+import { mean, pearson, quantile, welchT, type Correlation } from './stats';
 import type { DayRecord } from './whoop/types';
 
 export const column = (days: DayRecord[], key: keyof DayRecord): (number | null)[] =>
@@ -694,4 +695,252 @@ export function rhythms(days: DayRecord[], minN = 60): Rhythm[] {
         .some((p) => p.power > spectrum.faLevel);
     return { ...s, spectrum, q: q[i].q, weeklyIsReal: weekly };
   });
+}
+
+/* ------------------------- 8. Reloj circadiano ---------------------------- */
+
+export interface ClockQuartiles {
+  /** Minutes past midnight, 0…1439. */
+  q1: number;
+  median: number;
+  q3: number;
+  n: number;
+}
+
+export interface ClockSession {
+  day: string;
+  /** Start of the session, minutes past midnight. */
+  minuteOfDay: number;
+  strain: number;
+  duration: number | null;
+  activity: string;
+}
+
+export interface ClockWakeHour {
+  hour: number;
+  /** Mean recovery of the mornings that woke in this hour. Null below `minPerHour`. */
+  recovery: number | null;
+  n: number;
+}
+
+export interface CircadianClock {
+  ok: true;
+  bedtime: ClockQuartiles;
+  wake: ClockQuartiles;
+  /**
+   * Width of the arc from the median bedtime to the median wake.
+   *
+   * Deliberately **not** the median of the nightly durations: the two are
+   * different numbers and only this one is what the arc draws. Calling it a
+   * median sleep duration would be describing the picture with a statistic the
+   * picture does not contain.
+   */
+  windowMinutes: number;
+  sessions: ClockSession[];
+  /** Activities by total strain, descending. The order is the colour order. */
+  activities: { activity: string; sessions: number; strain: number }[];
+  wakeHours: ClockWakeHour[];
+  /** Mean recovery over the whole window: the reference the outer ring deviates from. */
+  meanRecovery: number | null;
+  /** Largest single-session strain, for scaling the marks. */
+  maxStrain: number;
+  n: number;
+  minN: number;
+}
+
+export type CircadianClockResult = CircadianClock | Insufficient;
+
+const quartilesOf = (values: (number | null)[]): ClockQuartiles | null => {
+  const present = values.filter((v): v is number => v != null && Number.isFinite(v));
+  const q1 = quantile(present, 0.25);
+  const median = quantile(present, 0.5);
+  const q3 = quantile(present, 0.75);
+  if (q1 == null || median == null || q3 == null) return null;
+  // Bedtimes are stored shifted past 24:00 so they sort across midnight; the
+  // quantiles are taken on that scale and only then wrapped onto the clock face.
+  const wrap = (v: number) => ((v % 1440) + 1440) % 1440;
+  return { q1: wrap(q1), median: wrap(median), q3: wrap(q3), n: present.length };
+};
+
+/**
+ * Everything the circadian clock draws: the sleep window, every workout at the
+ * hour it started, and recovery by the hour of waking.
+ *
+ * Three readings of one axis — the hour of the day — that the rest of the
+ * dashboard only ever shows as separate time series. What it can answer that a
+ * line chart cannot is where the day's load actually sits: whether the training
+ * clusters at one hour or is scattered, how wide the sleep window really is
+ * rather than how variable its average was, and whether the mornings that start
+ * early are the ones that score badly.
+ *
+ * Everything here comes off columns the export ships: `Sleep onset`,
+ * `Wake onset`, the workout `Start time`, `Activity Strain` and the recovery
+ * score. Nothing is modelled and nothing is imputed.
+ */
+export function circadianClock(
+  days: DayRecord[],
+  options: { minN?: number; minPerHour?: number } = {},
+): CircadianClockResult {
+  const { minN = 21, minPerHour = 5 } = options;
+
+  const bedtime = quartilesOf(column(days, 'bedtime'));
+  const wake = quartilesOf(column(days, 'wakeTime'));
+  const nights = Math.min(bedtime?.n ?? 0, wake?.n ?? 0);
+  if (!bedtime || !wake || nights < minN) return insufficient(nights, minN);
+
+  const sessions: ClockSession[] = [];
+  const totals = new Map<string, { sessions: number; strain: number }>();
+  for (const day of days) {
+    for (const workout of day.workouts) {
+      if (!workout.start || workout.strain == null || !Number.isFinite(workout.strain)) continue;
+      sessions.push({
+        day: day.day,
+        minuteOfDay: workout.start.getHours() * 60 + workout.start.getMinutes(),
+        strain: workout.strain,
+        duration: workout.duration,
+        activity: workout.activity,
+      });
+      const entry = totals.get(workout.activity) ?? { sessions: 0, strain: 0 };
+      entry.sessions += 1;
+      entry.strain += workout.strain;
+      totals.set(workout.activity, entry);
+    }
+  }
+
+  const buckets = new Map<number, number[]>();
+  for (const day of days) {
+    if (day.wakeTime == null || day.recovery == null) continue;
+    const hour = Math.floor((((day.wakeTime % 1440) + 1440) % 1440) / 60);
+    const list = buckets.get(hour);
+    if (list) list.push(day.recovery);
+    else buckets.set(hour, [day.recovery]);
+  }
+
+  return {
+    ok: true,
+    bedtime,
+    wake,
+    // Wake is carried a day forward so the subtraction stays positive across midnight.
+    windowMinutes:
+      wake.median + 1440 - (bedtime.median < 720 ? bedtime.median + 1440 : bedtime.median),
+    sessions,
+    activities: [...totals.entries()]
+      .map(([activity, e]) => ({ activity, ...e }))
+      .sort((a, b) => b.strain - a.strain),
+    wakeHours: [...buckets.entries()]
+      .map(([hour, values]) => ({
+        hour,
+        // Rule three: below the minimum the cell has no value, not a value of zero.
+        recovery: values.length >= minPerHour ? mean(values) : null,
+        n: values.length,
+      }))
+      .sort((a, b) => a.hour - b.hour),
+    meanRecovery: mean(column(days, 'recovery')),
+    maxStrain: sessions.reduce((max, s) => Math.max(max, s.strain), 0),
+    n: nights,
+    minN,
+  };
+}
+
+/* ------------------ 9. Carga por actividad y por semana -------------------- */
+
+export interface ActivityWeekRow {
+  activity: string;
+  /** Strain accumulated that week, aligned with `weeks`. Null where there was no session. */
+  cells: (number | null)[];
+  sessions: number[];
+  total: number;
+}
+
+export interface ActivityWeekLoad {
+  ok: true;
+  /** Monday of every week in the range, contiguous, as day keys. */
+  weeks: string[];
+  rows: ActivityWeekRow[];
+  /** Largest weekly cell in the grid, for the colour scale. */
+  max: number;
+  /** Activities that did not fit the grid, and what they were worth. */
+  hidden: { activities: number; strain: number };
+  n: number;
+  minN: number;
+}
+
+export type ActivityWeekLoadResult = ActivityWeekLoad | Insufficient;
+
+/** Monday of the ISO week a date belongs to. */
+const isoWeekStart = (date: Date): Date => {
+  const monday = new Date(date);
+  monday.setDate(monday.getDate() - ((date.getDay() + 6) % 7));
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+};
+
+/**
+ * Strain accumulated by activity and by ISO week.
+ *
+ * Which disciplines come and go is invisible in every other panel: the strain
+ * series adds them all together, and the activity table flattens the whole range
+ * into one mean. A block that stops in March and a block that starts in April
+ * look identical in both, and look like a training block in this one.
+ *
+ * Weeks are contiguous, filled from the first Monday to the last, so a month off
+ * reads as a month off and not as two adjacent weeks. A cell is `null` where the
+ * activity had no session at all that week, which is a different statement from
+ * a session that scored nothing.
+ */
+export function activityWeekLoad(
+  days: DayRecord[],
+  options: { minN?: number; maxRows?: number } = {},
+): ActivityWeekLoadResult {
+  const { minN = 28, maxRows = 12 } = options;
+  if (days.length < minN) return insufficient(days.length, minN);
+
+  const first = isoWeekStart(days[0].date);
+  const last = isoWeekStart(days[days.length - 1].date);
+  const weeks: string[] = [];
+  const index = new Map<string, number>();
+  for (let cursor = new Date(first); cursor <= last; cursor.setDate(cursor.getDate() + 7)) {
+    index.set(dayKey(cursor), weeks.length);
+    weeks.push(dayKey(cursor));
+  }
+
+  const rows = new Map<string, { cells: (number | null)[]; sessions: number[]; total: number }>();
+  for (const day of days) {
+    const column = index.get(dayKey(isoWeekStart(day.date)));
+    if (column == null) continue;
+    for (const workout of day.workouts) {
+      if (workout.strain == null || !Number.isFinite(workout.strain)) continue;
+      const row = rows.get(workout.activity) ?? {
+        cells: new Array<number | null>(weeks.length).fill(null),
+        sessions: new Array<number>(weeks.length).fill(0),
+        total: 0,
+      };
+      row.cells[column] = (row.cells[column] ?? 0) + workout.strain;
+      row.sessions[column] += 1;
+      row.total += workout.strain;
+      rows.set(workout.activity, row);
+    }
+  }
+
+  const ordered = [...rows.entries()]
+    .map(([activity, row]) => ({ activity, ...row }))
+    .sort((a, b) => b.total - a.total);
+  const shown = ordered.slice(0, maxRows);
+  const cut = ordered.slice(maxRows);
+
+  return {
+    ok: true,
+    weeks,
+    rows: shown,
+    max: shown.reduce(
+      (max, row) => row.cells.reduce((m: number, v) => Math.max(m, v ?? 0), max),
+      0,
+    ),
+    hidden: {
+      activities: cut.length,
+      strain: cut.reduce((sum, row) => sum + row.total, 0),
+    },
+    n: days.length,
+    minN,
+  };
 }
