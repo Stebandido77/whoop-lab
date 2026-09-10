@@ -1,52 +1,89 @@
-import { HBarChart, TimeSeriesChart } from '@/charts';
-import { Legend, Panel } from '@/components';
-import { bpm, f0, f1, f2, ms, pct, signed, WEEKDAYS } from '@/lib/format';
-import { column, computeDrivers, weekdayDeviation } from '@/lib/metrics';
+import { useMemo } from 'react';
+import { HBarChart, SpectrumChart, TimeSeriesChart, type SeriesMarker } from '@/charts';
+import { Legend, NotEnough, Panel } from '@/components';
+import { bpm, f0, f1, f2, fmtDayShort, ms, pct, signed, weekdayName } from '@/lib/format';
+import { useMessages } from '@/lib/i18n';
+import {
+  column,
+  computeDrivers,
+  hrvRegimeBreaks,
+  rhrControlChart,
+  rhythms,
+  weekdayDeviation,
+} from '@/lib/metrics';
 import { mean } from '@/lib/stats';
 import type { DayRecord } from '@/lib/whoop/types';
 
 export function RecoveryView({ days }: { days: DayRecord[] }) {
+  const m = useMessages();
   const drivers = computeDrivers(days);
   const weekdays = weekdayDeviation(days);
   const base = mean(column(days, 'recovery'));
+  const breaks = useMemo(() => hrvRegimeBreaks(days), [days]);
+  const control = useMemo(() => rhrControlChart(days), [days]);
+  const spectra = useMemo(() => rhythms(days), [days]);
+
+  const breakMarkers: SeriesMarker[] = breaks.ok
+    ? breaks.points.map((p) => ({
+        day: p.day,
+        kind: 'break',
+        label: fmtDayShort(p.day),
+        color: p.delta > 0 ? '--hi' : '--lo',
+      }))
+    : [];
+  const signalMarkers: SeriesMarker[] = control.ok
+    ? control.signals.map((s) => ({ day: s.day, kind: s.side }))
+    : [];
 
   return (
     <div className="grid">
-      <Panel
-        span={12}
-        title="HRV contra tu propia línea base"
-        subtitle="La línea gruesa es la media móvil de 28 días. Lo que importa no es el número, sino la distancia a tu base."
-      >
+      <Panel span={12} title={m.recovery.baselineTitle} subtitle={m.recovery.baselineSubtitle}>
         <TimeSeriesChart
           data={days}
           height={230}
           formatY={ms}
+          markers={breakMarkers}
           series={[
             {
               key: 'hrv',
               type: 'area',
-              label: 'HRV',
+              label: m.recovery.seriesHrv,
               color: '--hrv',
               width: 1.3,
               opacity: 0.55,
               format: ms,
             },
-            { key: 'hrv28', type: 'line', label: 'Base 28d', color: '--ink', width: 2, format: ms },
+            {
+              key: 'hrv28',
+              type: 'line',
+              label: m.recovery.seriesBase28,
+              color: '--ink',
+              width: 2,
+              format: ms,
+            },
           ]}
         />
         <Legend
           items={[
-            { color: '--hrv', label: 'HRV diaria' },
-            { color: '--ink', label: 'Línea base 28 días' },
+            { color: '--hrv', label: m.recovery.legendDailyHrv },
+            { color: '--ink', label: m.recovery.legendBaseline28 },
+            { color: '--hi', label: m.recovery.legendBreakUp },
+            { color: '--lo', label: m.recovery.legendBreakDown },
           ]}
         />
+        {!breaks.ok && (
+          <p className="subtitle" style={{ margin: '8px 0 0' }}>
+            {m.recovery.breaksMissing(f0(breaks.missing), f0(breaks.n), f0(breaks.minN))}
+          </p>
+        )}
+        {breaks.ok && breaks.points.length === 0 && (
+          <p className="subtitle" style={{ margin: '8px 0 0' }}>
+            {m.recovery.breaksNone}
+          </p>
+        )}
       </Panel>
 
-      <Panel
-        span={6}
-        title="Desviación de la base (z-score)"
-        subtitle="Por debajo de −1 son días en los que tu sistema nervioso pide calma."
-      >
+      <Panel span={6} title={m.recovery.zTitle} subtitle={m.recovery.zSubtitle}>
         <TimeSeriesChart
           data={days}
           height={200}
@@ -56,7 +93,7 @@ export function RecoveryView({ days }: { days: DayRecord[] }) {
             {
               key: 'hrvZ',
               type: 'bar',
-              label: 'z HRV',
+              label: m.recovery.zSeries,
               color: '--mid',
               colorFor: (v) => (v < -1 ? '--lo' : v > 1 ? '--hi' : '--mid'),
               format: f2,
@@ -65,30 +102,34 @@ export function RecoveryView({ days }: { days: DayRecord[] }) {
         />
       </Panel>
 
-      <Panel
-        span={6}
-        title="Pulso en reposo"
-        subtitle="Subidas sostenidas suelen adelantarse a enfermedad, alcohol o carga acumulada."
-      >
+      <Panel span={6} title={m.recovery.rhrTitle} subtitle={m.recovery.rhrSubtitle}>
         <TimeSeriesChart
           data={days}
           height={200}
           formatY={bpm}
+          markers={signalMarkers}
           series={[
             {
               key: 'rhr',
               type: 'dots',
-              label: 'RHR',
+              label: m.recovery.seriesRhr,
               color: '--lo',
               radius: 2.2,
               opacity: 0.55,
               format: bpm,
             },
-            { key: 'rhr7', type: 'line', label: 'Media 7d', color: '--lo', width: 2, format: bpm },
+            {
+              key: 'rhr7',
+              type: 'line',
+              label: m.recovery.seriesMean7,
+              color: '--lo',
+              width: 2,
+              format: bpm,
+            },
             {
               key: 'rhr28',
               type: 'line',
-              label: 'Base 28d',
+              label: m.recovery.seriesBase28,
               color: '--muted',
               width: 1.4,
               dash: '4 3',
@@ -96,35 +137,78 @@ export function RecoveryView({ days }: { days: DayRecord[] }) {
             },
           ]}
         />
+        <p className="subtitle" style={{ margin: '8px 0 0' }}>
+          {!control.ok
+            ? m.recovery.controlMissing(f0(control.missing), f0(control.n), f0(control.minN))
+            : control.signals.length === 0
+              ? m.recovery.controlNone(f0(control.h))
+              : m.recovery.controlSignals(
+                  control.signals.length,
+                  f0(control.signals.length),
+                  f0(control.n),
+                )}
+        </p>
       </Panel>
 
-      <Panel
-        span={6}
-        title="Qué mueve tu recuperación"
-        subtitle="Correlación de Pearson con el score de recuperación. Correlación no es causalidad, pero ordena las hipótesis."
-      >
+      <Panel span={6} title={m.recovery.driversTitle} subtitle={m.recovery.driversSubtitle}>
         <HBarChart
           diverging
           format={f2}
           rows={drivers.map((d) => ({
-            label: d.label,
+            label: m.recovery.drivers[d.id],
             value: d.r!,
             color: d.r! > 0 ? '--hi' : '--lo',
-            note: `n=${d.n}`,
+            note: `n=${f0(d.n)}`,
           }))}
         />
       </Panel>
 
+      {spectra.map((r) => (
+        <Panel
+          key={r.key}
+          span={6}
+          title={m.recovery.rhythmTitle(m.recovery.rhythmSeries[r.key])}
+          subtitle={m.recovery.rhythmSubtitle}
+        >
+          {r.spectrum.ok ? (
+            <>
+              <SpectrumChart
+                points={r.spectrum.points}
+                threshold={r.spectrum.faLevel}
+                color={r.key === 'hrv' ? '--hrv' : '--hi'}
+                marks={[{ period: 7, label: m.recovery.weekMark, strong: r.weeklyIsReal }]}
+              />
+              <p className="subtitle" style={{ margin: '8px 0 0' }}>
+                {r.spectrum.peak == null
+                  ? m.recovery.noPeak
+                  : r.spectrum.peak.power > r.spectrum.faLevel
+                    ? m.recovery.peak(
+                        f1(r.spectrum.peak.period),
+                        r.q == null ? '—' : f2(r.q),
+                        r.weeklyIsReal,
+                      )
+                    : m.recovery.noPeakOverThreshold(f1(r.spectrum.peak.period))}{' '}
+                <span style={{ color: 'var(--muted)' }}>
+                  {m.recovery.spectrumDays(f0(r.spectrum.n))}
+                </span>
+              </p>
+            </>
+          ) : (
+            <NotEnough state={r.spectrum} what={m.recovery.periodogramWhat} />
+          )}
+        </Panel>
+      ))}
+
       <Panel
         span={6}
-        title="Recuperación por día de la semana"
-        subtitle={`Diferencia frente a tu media del rango (${pct(base)}). Aquí es donde se ven los viernes.`}
+        title={m.recovery.weekdayTitle}
+        subtitle={m.recovery.weekdaySubtitle(pct(base))}
       >
         <HBarChart
           diverging
           format={(v) => signed(v, f1, ' pp')}
           rows={weekdays.map((w) => ({
-            label: WEEKDAYS[w.weekday],
+            label: weekdayName(w.weekday),
             value: w.deviation,
             color: w.deviation > 0 ? '--hi' : '--lo',
             note: `(${f0(w.mean)}%)`,

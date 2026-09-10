@@ -1,11 +1,33 @@
+import { useMemo } from 'react';
 import { CalendarHeatmap, recoveryToken, ScatterChart, TimeSeriesChart } from '@/charts';
-import { KpiCard, Legend, Panel } from '@/components';
-import { f0, f1, f2, fmtDayLong, hoursMinutes, pct, WEEKDAYS } from '@/lib/format';
-import { column, periodValue } from '@/lib/metrics';
+import { KpiCard, Legend, NotEnough, Panel } from '@/components';
+import { f0, f1, f2, fmtDayLong, hoursMinutes, pct, signed, weekdayName } from '@/lib/format';
+import type { RatioProblem } from '@/lib/econ';
+import { useMessages, type Messages } from '@/lib/i18n';
+import {
+  adjustedHabitEffects,
+  column,
+  periodValue,
+  recoveryElasticities,
+  type ElasticitiesResult,
+} from '@/lib/metrics';
 import { mean, pearson, sd } from '@/lib/stats';
 import type { DayRecord } from '@/lib/whoop/types';
 
-export function OverviewView({ days, previous }: { days: DayRecord[]; previous: DayRecord[] }) {
+export function OverviewView({
+  days,
+  previous,
+  questions,
+}: {
+  days: DayRecord[];
+  previous: DayRecord[];
+  questions: string[];
+}) {
+  const m = useMessages();
+  const elasticities = useMemo(
+    () => recoveryElasticities(adjustedHabitEffects(days, questions)),
+    [days, questions],
+  );
   const latest = [...days].reverse().find((d) => d.recovery != null) ?? days[days.length - 1];
   const recovery = periodValue(days, previous, 'recovery');
   const hrv = periodValue(days, previous, 'hrv');
@@ -20,7 +42,7 @@ export function OverviewView({ days, previous }: { days: DayRecord[]; previous: 
           <div className="rail">
             <div>
               <span className="label" style={{ color: 'var(--muted)', fontSize: 12.5 }}>
-                Última recuperación · {fmtDayLong(latest.day)}
+                {m.overview.lastRecovery} · {fmtDayLong(latest.day)}
               </span>
               <div className="big" style={{ color: `var(${recoveryToken(latest.recovery)})` }}>
                 {latest.recovery == null ? '—' : f0(latest.recovery)}
@@ -29,28 +51,26 @@ export function OverviewView({ days, previous }: { days: DayRecord[]; previous: 
             </div>
             <div>
               <div className="row">
-                <span>HRV</span>
+                <span>{m.overview.hrv}</span>
                 <span>{f0(latest.hrv)} ms</span>
               </div>
               <div className="row">
-                <span>Pulso en reposo</span>
+                <span>{m.overview.rhr}</span>
                 <span>{f0(latest.rhr)} bpm</span>
               </div>
               <div className="row">
-                <span>Sueño</span>
+                <span>{m.overview.sleep}</span>
                 <span>{hoursMinutes(latest.asleep)}</span>
               </div>
               <div className="row">
-                <span>Strain</span>
+                <span>{m.overview.strain}</span>
                 <span>{f1(latest.strain)}</span>
               </div>
             </div>
           </div>
           <div>
-            <h3>Recuperación diaria y su media móvil de 7 días</h3>
-            <p className="subtitle">
-              Las barras son el score del día; la línea es la tendencia que la app no te muestra.
-            </p>
+            <h3>{m.overview.heroTitle}</h3>
+            <p className="subtitle">{m.overview.heroSubtitle}</p>
             <TimeSeriesChart
               data={days}
               height={206}
@@ -65,7 +85,7 @@ export function OverviewView({ days, previous }: { days: DayRecord[]; previous: 
                 {
                   key: 'recovery',
                   type: 'bar',
-                  label: 'Recuperación',
+                  label: m.overview.seriesRecovery,
                   color: '--hi',
                   colorFor: (v) => recoveryToken(v),
                   format: pct,
@@ -73,7 +93,7 @@ export function OverviewView({ days, previous }: { days: DayRecord[]; previous: 
                 {
                   key: 'recovery7',
                   type: 'line',
-                  label: 'Media 7d',
+                  label: m.overview.seriesMean7,
                   color: '--ink',
                   width: 1.8,
                   format: pct,
@@ -86,7 +106,7 @@ export function OverviewView({ days, previous }: { days: DayRecord[]; previous: 
 
       <div className="grid span-12 kpi-row" style={{ gridColumn: 'span 12' }}>
         <KpiCard
-          label="Recuperación media"
+          label={m.overview.kpiRecovery}
           value={f0(recovery.value)}
           unit="%"
           delta={recovery.delta}
@@ -95,7 +115,7 @@ export function OverviewView({ days, previous }: { days: DayRecord[]; previous: 
           trendColor="--hi"
         />
         <KpiCard
-          label="HRV media"
+          label={m.overview.kpiHrv}
           value={f0(hrv.value)}
           unit="ms"
           delta={hrv.delta}
@@ -104,7 +124,7 @@ export function OverviewView({ days, previous }: { days: DayRecord[]; previous: 
           trendColor="--hrv"
         />
         <KpiCard
-          label="Pulso en reposo"
+          label={m.overview.kpiRhr}
           value={f0(rhr.value)}
           unit="bpm"
           delta={rhr.delta}
@@ -114,7 +134,7 @@ export function OverviewView({ days, previous }: { days: DayRecord[]; previous: 
           trendColor="--lo"
         />
         <KpiCard
-          label="Sueño por noche"
+          label={m.overview.kpiSleep}
           value={f1(sleep.value)}
           unit="h"
           delta={sleep.delta}
@@ -124,15 +144,11 @@ export function OverviewView({ days, previous }: { days: DayRecord[]; previous: 
         />
       </div>
 
-      <Panel
-        span={12}
-        title="Calendario de recuperación"
-        subtitle="Cada celda es un día. Sirve para ver rachas y estacionalidad, no picos aislados."
-      >
+      <Panel span={12} title={m.overview.calendarTitle} subtitle={m.overview.calendarSubtitle}>
         <CalendarHeatmap
           data={days}
           metric="recovery"
-          label="Recuperación"
+          label={m.overview.seriesRecovery}
           colorFor={recoveryToken}
           format={pct}
         />
@@ -141,20 +157,16 @@ export function OverviewView({ days, previous }: { days: DayRecord[]; previous: 
             { color: '--lo', label: '< 34%' },
             { color: '--mid', label: '34–66%' },
             { color: '--hi', label: '≥ 67%' },
-            { color: '--grid', label: 'sin dato' },
+            { color: '--grid', label: m.common.noData },
           ]}
         />
       </Panel>
 
-      <Panel
-        span={7}
-        title="¿Cuánto te cuesta el strain al día siguiente?"
-        subtitle="Cada punto es un día: strain acumulado frente a la recuperación de la mañana siguiente."
-      >
+      <Panel span={7} title={m.overview.scatterTitle} subtitle={m.overview.scatterSubtitle}>
         <ScatterChart
           height={270}
-          xLabel="Strain del día"
-          yLabel="Recuperación al día siguiente"
+          xLabel={m.overview.scatterX}
+          yLabel={m.overview.scatterY}
           formatY={pct}
           guideY={67}
           points={days
@@ -167,16 +179,87 @@ export function OverviewView({ days, previous }: { days: DayRecord[]; previous: 
             }))}
         />
         <p className="subtitle" style={{ margin: '10px 0 0' }}>
-          Correlación r = <b>{f2(strainVsNext.r)}</b> sobre {strainVsNext.n} días.
+          {m.overview.correlation(f2(strainVsNext.r), f0(strainVsNext.n))}
         </p>
       </Panel>
+
+      <Elasticities result={elasticities} />
 
       <Highlights days={days} />
     </div>
   );
 }
 
+/**
+ * Marginal effects and the rate at which one buys back the other. The ratio is
+ * the interesting number and the fragile one: it is only defined while its
+ * denominator is, so the card says so rather than printing a figure whose
+ * confidence set is really the whole number line.
+ */
+function Elasticities({ result }: { result: ElasticitiesResult }) {
+  const m = useMessages();
+  return (
+    <Panel
+      span={12}
+      title={m.overview.elasticitiesTitle}
+      subtitle={m.overview.elasticitiesSubtitle}
+    >
+      {!result.ok ? (
+        <NotEnough state={result} what={m.overview.elasticitiesWhat} />
+      ) : (
+        <>
+          <table>
+            <thead>
+              <tr>
+                <th>{m.overview.colMarginalEffect}</th>
+                <th className="num">{m.overview.colPp}</th>
+                <th className="num">{m.overview.colCi95}</th>
+                <th className="num">{m.overview.colQ}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.terms.map((t) => (
+                <tr key={t.id}>
+                  <td>{m.overview.elasticity[t.id]}</td>
+                  <td
+                    className="num"
+                    style={{ color: t.coef > 0 ? 'var(--hi)' : 'var(--lo)', fontWeight: 500 }}
+                  >
+                    {signed(t.coef, f2)}
+                  </td>
+                  <td className="num" style={{ color: 'var(--muted)' }}>
+                    {m.overview.ciRange(f2(t.ciLow), f2(t.ciHigh))}
+                  </td>
+                  <td className="num">{t.q == null ? '—' : f2(t.q)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="callout" style={{ marginTop: 12 }}>
+            {result.substitution.identified
+              ? m.overview.substitution(
+                  f2(Math.abs(result.substitution.coef)),
+                  f2(Math.min(result.substitution.ciLow, result.substitution.ciHigh)),
+                  f2(Math.max(result.substitution.ciLow, result.substitution.ciHigh)),
+                  f0(result.n),
+                )
+              : m.overview.substitutionUnidentified(ratioReason(m, result.substitution.problem))}
+          </div>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+const ratioReason = (m: Messages, problem: RatioProblem): string =>
+  problem.code === 'missing-term'
+    ? m.overview.ratioMissingTerm
+    : m.overview.ratioDenominatorZero(problem.name);
+
 function Highlights({ days }: { days: DayRecord[] }) {
+  const m = useMessages();
+  const h = m.overview.highlights;
   const withRecovery = days.filter((d) => d.recovery != null);
   const rows: [string, string][] = [];
 
@@ -184,14 +267,19 @@ function Highlights({ days }: { days: DayRecord[] }) {
     const best = withRecovery.reduce((a, b) => (b.recovery! > a.recovery! ? b : a));
     const worst = withRecovery.reduce((a, b) => (b.recovery! < a.recovery! ? b : a));
     rows.push([
-      'Mejor y peor día',
-      `${pct(best.recovery)} el ${fmtDayLong(best.day)} · ${pct(worst.recovery)} el ${fmtDayLong(worst.day)}`,
+      h.bestWorst,
+      h.bestWorstValue(
+        pct(best.recovery),
+        fmtDayLong(best.day),
+        pct(worst.recovery),
+        fmtDayLong(worst.day),
+      ),
     ]);
     const green = withRecovery.filter((d) => d.recovery! >= 67).length;
     const red = withRecovery.filter((d) => d.recovery! < 34).length;
     rows.push([
-      'Reparto de días',
-      `${f0((100 * green) / withRecovery.length)}% en verde, ${f0((100 * red) / withRecovery.length)}% en rojo`,
+      h.split,
+      h.splitValue(f0((100 * green) / withRecovery.length), f0((100 * red) / withRecovery.length)),
     ]);
   }
 
@@ -202,8 +290,8 @@ function Highlights({ days }: { days: DayRecord[] }) {
     const best = perWeekday.reduce((a, b) => (b.value > a.value ? b : a));
     const worst = perWeekday.reduce((a, b) => (b.value < a.value ? b : a));
     rows.push([
-      'Día fuerte / día flojo',
-      `${WEEKDAYS[best.i]} ${pct(best.value)} frente a ${WEEKDAYS[worst.i]} ${pct(worst.value)}`,
+      h.weekday,
+      h.weekdayValue(weekdayName(best.i), pct(best.value), weekdayName(worst.i), pct(worst.value)),
     ]);
   }
 
@@ -213,35 +301,25 @@ function Highlights({ days }: { days: DayRecord[] }) {
       (sleepVsRecovery.r * (sd(column(days, 'recovery')) ?? 0)) /
       (sd(column(days, 'sleepHours')) || 1);
     rows.push([
-      'Sueño y recuperación',
-      `r = ${f2(sleepVsRecovery.r)} (${sleepVsRecovery.n} días). Una hora más se asocia a ${f1(slope)} pp.`,
+      h.sleepRecovery,
+      h.sleepRecoveryValue(f2(sleepVsRecovery.r), f0(sleepVsRecovery.n), f1(slope)),
     ]);
   }
 
   const consistency = mean(column(days, 'sleepConsistency'));
-  if (consistency != null)
-    rows.push(['Consistencia de horarios', `${f0(consistency)}% en promedio`]);
+  if (consistency != null) rows.push([h.consistency, h.consistencyValue(f0(consistency))]);
 
   const debt = mean(column(days, 'sleepDebt'));
-  if (debt != null) rows.push(['Deuda de sueño media', hoursMinutes(debt)]);
+  if (debt != null) rows.push([h.debt, hoursMinutes(debt)]);
 
   const acwr = [...days].reverse().find((d) => d.acwr != null)?.acwr;
   if (acwr != null) {
-    const verdict =
-      acwr > 1.35
-        ? 'estás subiendo carga rápido'
-        : acwr < 0.8
-          ? 'vienes descargando'
-          : 'en rango estable';
-    rows.push(['Carga aguda / crónica', `${f2(acwr)} — ${verdict}`]);
+    const verdict = acwr > 1.35 ? h.acwrRising : acwr < 0.8 ? h.acwrFalling : h.acwrStable;
+    rows.push([h.acwr, h.acwrValue(f2(acwr), verdict)]);
   }
 
   return (
-    <Panel
-      span={5}
-      title="Lo que salta a la vista"
-      subtitle="Cálculos sobre el rango seleccionado."
-    >
+    <Panel span={5} title={m.overview.highlightsTitle} subtitle={m.overview.highlightsSubtitle}>
       <table>
         <tbody>
           {rows.map(([label, value]) => (

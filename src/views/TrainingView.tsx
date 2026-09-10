@@ -1,15 +1,25 @@
-import { HBarChart, TimeSeriesChart } from '@/charts';
-import { Panel } from '@/components';
-import { f0, f1, f2, hoursMinutes } from '@/lib/format';
-import { summarizeActivities, zoneMinutes } from '@/lib/metrics';
+import { useMemo } from 'react';
+import { BinScatterChart, HBarChart, IrfChart, TimeSeriesChart } from '@/charts';
+import { NotEnough, Panel } from '@/components';
+import { f0, f1, f2, hoursMinutes, pct, signed } from '@/lib/format';
+import { useMessages } from '@/lib/i18n';
+import {
+  doseResponse,
+  strainImpulseResponse,
+  summarizeActivities,
+  zoneMinutes,
+} from '@/lib/metrics';
 import { byWeek } from '@/lib/whoop/model';
 import type { DayRecord } from '@/lib/whoop/types';
 
 const ZONE_COLORS = ['--wake', '--light', '--rem', '--mid', '--lo'];
 
 export function TrainingView({ days }: { days: DayRecord[] }) {
+  const m = useMessages();
   const activities = summarizeActivities(days);
   const zones = zoneMinutes(days);
+  const irf = useMemo(() => strainImpulseResponse(days), [days]);
+  const dose = useMemo(() => doseResponse(days, 'strain', 'recoveryNext'), [days]);
   const weeks = byWeek(days, ['workoutMinutes', 'workoutCount', 'strain']).map((w) => ({
     ...w,
     totalMinutes:
@@ -18,11 +28,54 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
 
   return (
     <div className="grid">
-      <Panel
-        span={12}
-        title="Carga aguda contra carga crónica"
-        subtitle="Media de strain a 7 días sobre la de 28 días. Por encima de 1,3 la carga sube más rápido de lo que la aguantas."
-      >
+      <Panel span={12} title={m.training.irfTitle} subtitle={m.training.irfSubtitle}>
+        {irf.ok ? (
+          <>
+            <IrfChart
+              points={irf.lags}
+              label={m.training.irfLabel}
+              format={(v) => signed(v, f2, ' pp')}
+              color="--strain"
+            />
+            <div className="callout" style={{ marginTop: 10 }}>
+              {m.training.cumulative(
+                signed(irf.cumulative.coef, f2, ' pp'),
+                f2(irf.cumulative.ciLow),
+                f2(irf.cumulative.ciHigh),
+              )}{' '}
+              {irf.lastLagThatBites == null
+                ? m.training.noLagBites
+                : m.training.lastLagBites(
+                    irf.lastLagThatBites,
+                    m.common.days(irf.lastLagThatBites),
+                  )}{' '}
+              <span style={{ color: 'var(--muted)' }}>
+                {m.training.irfFooter(f0(irf.n), f0(irf.bandwidth), f2(irf.r2))}
+              </span>
+            </div>
+          </>
+        ) : (
+          <NotEnough state={irf} what={m.training.irfWhat} />
+        )}
+      </Panel>
+
+      <Panel span={12} title={m.training.doseTitle} subtitle={m.training.doseSubtitle}>
+        {dose.ok ? (
+          <BinScatterChart
+            points={dose.points}
+            xLabel={m.training.doseX}
+            yLabel={m.training.doseY}
+            formatY={pct}
+            formatX={f1}
+            color="--strain"
+            height={300}
+          />
+        ) : (
+          <NotEnough state={dose} what={m.training.doseWhat} />
+        )}
+      </Panel>
+
+      <Panel span={12} title={m.training.acwrTitle} subtitle={m.training.acwrSubtitle}>
         <TimeSeriesChart
           data={days}
           height={210}
@@ -37,7 +90,7 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
         />
       </Panel>
 
-      <Panel span={7} title="Strain diario y su media móvil">
+      <Panel span={7} title={m.training.strainTitle}>
         <TimeSeriesChart
           data={days}
           height={210}
@@ -46,7 +99,7 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
             {
               key: 'strain',
               type: 'bar',
-              label: 'Strain',
+              label: m.training.strainSeries,
               color: '--strain',
               opacity: 0.55,
               format: f1,
@@ -54,7 +107,7 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
             {
               key: 'strain7',
               type: 'line',
-              label: 'Media 7d',
+              label: m.training.mean7,
               color: '--ink',
               width: 1.9,
               format: f2,
@@ -63,26 +116,26 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
         />
       </Panel>
 
-      <Panel span={5} title="Actividades del rango">
+      <Panel span={5} title={m.training.activitiesTitle}>
         {activities.length === 0 ? (
-          <p className="empty">No hay actividades en este rango.</p>
+          <p className="empty">{m.training.activitiesEmpty}</p>
         ) : (
           <div className="table-box">
             <table>
               <thead>
                 <tr>
-                  <th>Actividad</th>
-                  <th className="num">Sesiones</th>
-                  <th className="num">Tiempo</th>
-                  <th className="num">Strain medio</th>
-                  <th className="num">FC media</th>
+                  <th>{m.training.colActivity}</th>
+                  <th className="num">{m.training.colSessions}</th>
+                  <th className="num">{m.training.colTime}</th>
+                  <th className="num">{m.training.colMeanStrain}</th>
+                  <th className="num">{m.training.colMeanHr}</th>
                 </tr>
               </thead>
               <tbody>
                 {activities.map((a) => (
                   <tr key={a.activity}>
                     <td>{a.activity}</td>
-                    <td className="num">{a.sessions}</td>
+                    <td className="num">{f0(a.sessions)}</td>
                     <td className="num">{hoursMinutes(a.minutes)}</td>
                     <td className="num">{f1(a.meanStrain)}</td>
                     <td className="num">{f0(a.meanHr)}</td>
@@ -94,26 +147,18 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
         )}
       </Panel>
 
-      <Panel
-        span={6}
-        title="Reparto por zona de frecuencia cardiaca"
-        subtitle="Minutos totales del rango en cada zona."
-      >
+      <Panel span={6} title={m.training.zonesTitle} subtitle={m.training.zonesSubtitle}>
         <HBarChart
           format={hoursMinutes}
           rows={zones.map((minutes, i) => ({
-            label: `Zona ${i + 1}`,
+            label: m.training.zone(i + 1),
             value: minutes,
             color: ZONE_COLORS[i],
           }))}
         />
       </Panel>
 
-      <Panel
-        span={6}
-        title="Volumen semanal"
-        subtitle="Minutos de actividad acumulados por semana."
-      >
+      <Panel span={6} title={m.training.volumeTitle} subtitle={m.training.volumeSubtitle}>
         <TimeSeriesChart
           data={weeks}
           height={210}
@@ -122,7 +167,7 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
             {
               key: 'totalMinutes',
               type: 'bar',
-              label: 'Minutos',
+              label: m.training.volumeSeries,
               color: '--strain',
               format: hoursMinutes,
             },

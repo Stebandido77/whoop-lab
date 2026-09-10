@@ -37,23 +37,54 @@ export interface GuideLine {
 }
 
 /**
+ * A dated annotation drawn over a series. `break` is a vertical rule for a
+ * regime change; `high` and `low` are small flags for a control-chart signal.
+ * Markers live on the series they annotate rather than in a panel of their own,
+ * because a date only means something next to the line it interrupts.
+ */
+export interface SeriesMarker {
+  day: string;
+  kind: 'break' | 'high' | 'low';
+  label?: string;
+  color?: string;
+}
+
+/**
  * Charts are painted from CSS custom properties so that the light and dark
  * palettes stay in one file. SVG presentation attributes do not reliably accept
  * `var()`, so we resolve to a concrete colour and re-resolve when the theme
  * changes.
+ *
+ * There are two ways the theme changes and both have to invalidate the cache:
+ * the system scheme flipping under `prefers-color-scheme`, and `data-theme`
+ * being set on the root element by a switcher in the interface. Watching only
+ * the media query left already-mounted charts painting the old palette until
+ * something remounted them — a latent defect for as long as there was no
+ * switcher, and a visible one the moment there is.
  */
 export function useResolvedColor(): (token: string) => string {
   const [, bump] = useState(0);
   const cache = useRef(new Map<string, string>());
 
   useEffect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = () => {
+    const invalidate = () => {
       cache.current.clear();
       bump((n) => n + 1);
     };
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
+
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    mq.addEventListener('change', invalidate);
+
+    const observer = new MutationObserver(invalidate);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+
+    return () => {
+      mq.removeEventListener('change', invalidate);
+      observer.disconnect();
+    };
   }, []);
 
   return useCallback((token: string) => {

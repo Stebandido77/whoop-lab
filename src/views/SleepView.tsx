@@ -1,47 +1,69 @@
-import { recoveryToken, ScatterChart, StackedBarChart, TimeSeriesChart } from '@/charts';
-import { KpiCard, Legend, Panel } from '@/components';
+import { useMemo } from 'react';
+import {
+  BinScatterChart,
+  recoveryToken,
+  ScatterChart,
+  StackedBarChart,
+  TimeSeriesChart,
+} from '@/charts';
+import { KpiCard, Legend, NotEnough, Panel } from '@/components';
 import { clockTime, f0, f1, fmtDayLong, pct } from '@/lib/format';
-import { column, periodValue } from '@/lib/metrics';
+import { useMessages } from '@/lib/i18n';
+import { column, doseResponse, periodValue } from '@/lib/metrics';
 import { bedtimeVariability, byWeek } from '@/lib/whoop/model';
 import type { DayRecord } from '@/lib/whoop/types';
 
-const LAYERS = [
-  { key: 'deep', label: 'Profundo', color: '--deep' },
-  { key: 'rem', label: 'REM', color: '--rem' },
-  { key: 'light', label: 'Ligero', color: '--light' },
-  { key: 'awake', label: 'Despierto', color: '--wake' },
-];
+const STAGES = [
+  { key: 'deep', color: '--deep' },
+  { key: 'rem', color: '--rem' },
+  { key: 'light', color: '--light' },
+  { key: 'awake', color: '--wake' },
+] as const;
 
 const WEEKLY_THRESHOLD = 120;
 
 export function SleepView({ days, previous }: { days: DayRecord[]; previous: DayRecord[] }) {
+  const m = useMessages();
   const weekly = days.length > WEEKLY_THRESHOLD;
   const stackData = weekly ? byWeek(days, ['deep', 'rem', 'light', 'awake']) : days;
+  const layers = STAGES.map((s) => ({ ...s, label: m.sleep.stages[s.key] }));
 
   const sleep = periodValue(days, previous, 'sleepHours');
   const efficiency = periodValue(days, previous, 'sleepEfficiency');
   const consistency = periodValue(days, previous, 'sleepConsistency');
   const debt = periodValue(days, previous, 'sleepDebt');
   const bedSd = bedtimeVariability(days);
+  const dose = useMemo(() => doseResponse(days, 'sleepHours', 'recovery'), [days]);
 
   return (
     <div className="grid">
+      <Panel span={12} title={m.sleep.doseTitle} subtitle={m.sleep.doseSubtitle}>
+        {dose.ok ? (
+          <BinScatterChart
+            points={dose.points}
+            xLabel={m.sleep.doseX}
+            yLabel={m.sleep.doseY}
+            formatY={pct}
+            formatX={f1}
+            color="--sleep"
+            height={300}
+          />
+        ) : (
+          <NotEnough state={dose} what={m.sleep.doseWhat} />
+        )}
+      </Panel>
       <Panel
         span={12}
-        title="Arquitectura del sueño"
-        subtitle={
-          weekly
-            ? 'Cada barra es una semana (promedio por noche), partida por fase. Baja el rango a 90 días para ver noche a noche.'
-            : 'Cada barra es una noche, partida por fase.'
-        }
+        title={m.sleep.architectureTitle}
+        subtitle={weekly ? m.sleep.architectureWeekly : m.sleep.architectureDaily}
       >
-        <StackedBarChart data={stackData} layers={LAYERS} height={240} />
-        <Legend items={LAYERS.map((l) => ({ color: l.color, label: l.label }))} />
+        <StackedBarChart data={stackData} layers={layers} height={240} />
+        <Legend items={layers.map((l) => ({ color: l.color, label: l.label }))} />
       </Panel>
 
       <div className="grid span-12 kpi-row" style={{ gridColumn: 'span 12' }}>
         <KpiCard
-          label="Sueño medio"
+          label={m.sleep.kpiSleep}
           value={f1(sleep.value)}
           unit="h"
           delta={sleep.delta}
@@ -50,7 +72,7 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
           trendColor="--sleep"
         />
         <KpiCard
-          label="Eficiencia"
+          label={m.sleep.kpiEfficiency}
           value={f0(efficiency.value)}
           unit="%"
           delta={efficiency.delta}
@@ -59,7 +81,7 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
           trendColor="--hi"
         />
         <KpiCard
-          label="Consistencia"
+          label={m.sleep.kpiConsistency}
           value={f0(consistency.value)}
           unit="%"
           delta={consistency.delta}
@@ -68,7 +90,7 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
           trendColor="--hrv"
         />
         <KpiCard
-          label="Deuda media"
+          label={m.sleep.kpiDebt}
           value={f0(debt.value)}
           unit="min"
           delta={debt.delta}
@@ -79,11 +101,7 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
         />
       </div>
 
-      <Panel
-        span={7}
-        title="Tu ventana de sueño"
-        subtitle="Hora de acostarte y de levantarte, noche por noche. Mientras más planas las líneas, mejor tu consistencia."
-      >
+      <Panel span={7} title={m.sleep.windowTitle} subtitle={m.sleep.windowSubtitle}>
         <TimeSeriesChart
           data={days}
           height={230}
@@ -92,7 +110,7 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
             {
               key: 'bedtime',
               type: 'line',
-              label: 'Me acuesto',
+              label: m.sleep.bedtime,
               color: '--deep',
               width: 1.5,
               opacity: 0.85,
@@ -101,7 +119,7 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
             {
               key: 'wakeTimeAdjusted',
               type: 'line',
-              label: 'Me levanto',
+              label: m.sleep.wakeTime,
               color: '--mid',
               width: 1.5,
               opacity: 0.85,
@@ -110,20 +128,15 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
           ]}
         />
         <p className="subtitle" style={{ margin: '10px 0 0' }}>
-          Desviación estándar de la hora de acostarte:{' '}
-          <b>{bedSd == null ? '—' : `${f0(bedSd)} min`}</b>.
+          {m.sleep.bedtimeSd(bedSd == null ? '—' : `${f0(bedSd)} min`)}
         </p>
       </Panel>
 
-      <Panel
-        span={5}
-        title="Sueño y recuperación"
-        subtitle="Horas dormidas frente al score de esa misma mañana."
-      >
+      <Panel span={5} title={m.sleep.scatterTitle} subtitle={m.sleep.scatterSubtitle}>
         <ScatterChart
           height={265}
-          xLabel="Horas dormidas"
-          yLabel="Recuperación"
+          xLabel={m.sleep.scatterX}
+          yLabel={m.sleep.scatterY}
           formatY={pct}
           guideY={67}
           points={days
@@ -137,11 +150,7 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
         />
       </Panel>
 
-      <Panel
-        span={6}
-        title="Rendimiento del sueño frente a lo que necesitabas"
-        subtitle="Sleep performance = dormido / necesidad calculada por WHOOP."
-      >
+      <Panel span={6} title={m.sleep.performanceTitle} subtitle={m.sleep.performanceSubtitle}>
         <TimeSeriesChart
           data={days}
           height={210}
@@ -153,7 +162,7 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
             {
               key: 'sleepPerformance',
               type: 'bar',
-              label: 'Rendimiento',
+              label: m.sleep.performanceSeries,
               color: '--hi',
               colorFor: (v) => (v >= 90 ? '--hi' : v >= 70 ? '--mid' : '--lo'),
               format: pct,
@@ -162,11 +171,7 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
         />
       </Panel>
 
-      <Panel
-        span={6}
-        title="Composición: REM y profundo"
-        subtitle="Porcentaje del tiempo dormido, suavizado a 7 días para que se vea la tendencia y no el ruido."
-      >
+      <Panel span={6} title={m.sleep.compositionTitle} subtitle={m.sleep.compositionSubtitle}>
         <TimeSeriesChart
           data={days}
           height={210}
@@ -175,7 +180,7 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
             {
               key: 'remShare7',
               type: 'line',
-              label: 'REM',
+              label: m.sleep.stages.rem,
               color: '--rem',
               width: 2,
               format: (v) => `${f1(v)}%`,
@@ -183,7 +188,7 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
             {
               key: 'deepShare7',
               type: 'line',
-              label: 'Profundo',
+              label: m.sleep.stages.deep,
               color: '--hi',
               width: 2,
               format: (v) => `${f1(v)}%`,
@@ -191,7 +196,7 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
             {
               key: 'remShare',
               type: 'dots',
-              label: 'REM diario',
+              label: m.sleep.remDaily,
               color: '--rem',
               radius: 1.6,
               opacity: 0.28,
@@ -200,7 +205,7 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
             {
               key: 'deepShare',
               type: 'dots',
-              label: 'Profundo diario',
+              label: m.sleep.deepDaily,
               color: '--hi',
               radius: 1.6,
               opacity: 0.28,
@@ -210,8 +215,8 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
         />
         <Legend
           items={[
-            { color: '--rem', label: 'REM' },
-            { color: '--hi', label: 'Profundo' },
+            { color: '--rem', label: m.sleep.stages.rem },
+            { color: '--hi', label: m.sleep.stages.deep },
           ]}
         />
       </Panel>

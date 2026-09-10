@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { Sparkline } from '@/charts';
+import { f1 } from '@/lib/format';
+import { useMessages } from '@/lib/i18n';
 
 export interface KpiCardProps {
   label: string;
@@ -10,6 +12,7 @@ export interface KpiCardProps {
   deltaUnit?: string;
   /** `1` when higher is better, `-1` when lower is better. */
   direction?: 1 | -1;
+  /** Defaults to the locale's one-decimal format; never `toFixed`, which is en-US. */
   formatDelta?: (v: number) => string;
   trend?: (number | null)[];
   trendColor?: string;
@@ -23,10 +26,11 @@ export function KpiCard({
   delta,
   deltaUnit = '',
   direction = 1,
-  formatDelta = (v) => v.toFixed(1),
+  formatDelta = f1,
   trend,
   trendColor = '--hi',
 }: KpiCardProps) {
+  const m = useMessages();
   const tone =
     delta == null || Math.abs(delta) < 1e-9
       ? ''
@@ -42,7 +46,7 @@ export function KpiCard({
       </span>
       <span className="delta">
         {delta == null ? (
-          'sin periodo previo'
+          m.common.noPreviousPeriod
         ) : (
           <>
             <b className={tone}>
@@ -50,7 +54,7 @@ export function KpiCard({
               {formatDelta(delta)}
               {deltaUnit}
             </b>{' '}
-            vs. periodo anterior
+            {m.common.vsPreviousPeriod}
           </>
         )}
       </span>

@@ -1,3 +1,21 @@
+import {
+  benjaminiHochberg,
+  changePoints,
+  cusum,
+  distributedLag,
+  insufficient,
+  lombScargle,
+  ols,
+  ratio,
+  type ChangePointsResult,
+  type CusumResult,
+  type Estimate,
+  type Insufficient,
+  type LagCoefficient,
+  type OlsFit,
+  type PeriodogramResult,
+  type RatioResult,
+} from './econ';
 import { mean, pearson, welchT, type Correlation } from './stats';
 import type { DayRecord } from './whoop/types';
 
@@ -21,11 +39,24 @@ export function periodValue(
 }
 
 export interface DriverSpec {
-  label: string;
+  /** Key into `messages.recovery.drivers`; this layer holds no prose. */
+  id: DriverId;
   metric: keyof DayRecord;
   /** Metric to correlate against; defaults to same-day recovery. */
   against?: keyof DayRecord;
 }
+
+export type DriverId =
+  | 'sleepHours'
+  | 'sleepEfficiency'
+  | 'sleepConsistency'
+  | 'sleepDebt'
+  | 'remShare'
+  | 'deepShare'
+  | 'strainPrev'
+  | 'workoutMinutes'
+  | 'respiratoryRate'
+  | 'skinTemp';
 
 export interface DriverResult extends DriverSpec, Correlation {}
 
@@ -35,16 +66,16 @@ export interface DriverResult extends DriverSpec, Correlation {}
  * arrays at call sites.
  */
 export const RECOVERY_DRIVERS: DriverSpec[] = [
-  { label: 'Horas de sueño', metric: 'sleepHours' },
-  { label: 'Eficiencia del sueño', metric: 'sleepEfficiency' },
-  { label: 'Consistencia horaria', metric: 'sleepConsistency' },
-  { label: 'Deuda de sueño', metric: 'sleepDebt' },
-  { label: '% REM', metric: 'remShare' },
-  { label: '% sueño profundo', metric: 'deepShare' },
-  { label: 'Strain del día anterior', metric: 'strainPrev' },
-  { label: 'Minutos de entreno (ayer)', metric: 'workoutMinutes', against: 'recoveryNext' },
-  { label: 'Frecuencia respiratoria', metric: 'respiratoryRate' },
-  { label: 'Temperatura de piel', metric: 'skinTemp' },
+  { id: 'sleepHours', metric: 'sleepHours' },
+  { id: 'sleepEfficiency', metric: 'sleepEfficiency' },
+  { id: 'sleepConsistency', metric: 'sleepConsistency' },
+  { id: 'sleepDebt', metric: 'sleepDebt' },
+  { id: 'remShare', metric: 'remShare' },
+  { id: 'deepShare', metric: 'deepShare' },
+  { id: 'strainPrev', metric: 'strainPrev' },
+  { id: 'workoutMinutes', metric: 'workoutMinutes', against: 'recoveryNext' },
+  { id: 'respiratoryRate', metric: 'respiratoryRate' },
+  { id: 'skinTemp', metric: 'skinTemp' },
 ];
 
 export function computeDrivers(days: DayRecord[], specs = RECOVERY_DRIVERS): DriverResult[] {
@@ -185,4 +216,408 @@ export function weekdayDeviation(
         : { weekday, mean: m, deviation: m - base, n: values.filter((v) => v != null).length };
     })
     .filter((x): x is { weekday: number; mean: number; deviation: number; n: number } => x != null);
+}
+
+/* ------------------------------------------------------------------ *
+ * Modelos econométricos del rango
+ *
+ * Todo lo que las vistas de esta sección dibujan se calcula acá. Cada
+ * función devuelve `… | Insufficient`, así que un panel sin datos
+ * suficientes recibe el conteo que le falta y no una estimación frágil.
+ * Las especificaciones y los supuestos están en docs/metricas.md §6.
+ * ------------------------------------------------------------------ */
+
+interface DesignColumn {
+  name: string;
+  values: (number | null)[];
+}
+
+const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+/**
+ * Weekday dummies with the first present day omitted. One category has to be
+ * the reference or the set is collinear with the intercept — QR would drop a
+ * column on its own, but which one it drops depends on the data, and a control
+ * whose meaning shifts between ranges is worse than one we chose.
+ */
+function weekdayFixedEffects(days: DayRecord[]): DesignColumn[] {
+  const present = WEEKDAY_ORDER.filter((w) => days.some((d) => d.weekday === w));
+  return present.slice(1).map((w) => ({
+    name: `dow_${w}`,
+    values: days.map((d) => (d.weekday === w ? 1 : 0)),
+  }));
+}
+
+/** Calendar-month dummies, same reference rule. Absorbs seasonality. */
+function monthFixedEffects(days: DayRecord[]): DesignColumn[] {
+  const present = [...new Set(days.map((d) => d.date.getMonth()))].sort((a, b) => a - b);
+  return present.slice(1).map((m) => ({
+    name: `month_${m}`,
+    values: days.map((d) => (d.date.getMonth() === m ? 1 : 0)),
+  }));
+}
+
+/** Bedtime as hours, so its coefficient reads «per hour later», not per minute. */
+const bedtimeHours = (days: DayRecord[]): (number | null)[] =>
+  days.map((d) => (d.bedtime == null ? null : d.bedtime / 60));
+
+const dayClock = (days: DayRecord[]): number[] => days.map((_, i) => i);
+
+/* ---------------------------- 1. IRF del strain ---------------------------- */
+
+export interface StrainLag extends LagCoefficient {
+  /** Benjamini–Hochberg q over the family of lags. */
+  q: number | null;
+}
+
+export interface StrainIrf {
+  ok: true;
+  lags: StrainLag[];
+  /** Σβₖ: puntos de recuperación por un punto de strain sostenido toda la ventana. */
+  cumulative: Estimate;
+  /**
+   * Último rezago que de verdad cuesta recuperación: coeficiente negativo y
+   * q de Benjamini–Hochberg por debajo de 0,05. Se exige el signo porque un
+   * rezago positivo que separa de cero es un rebote, no la cola del golpe, y
+   * se exige q y no p porque siete rezagos a la vez son una familia.
+   */
+  lastLagThatBites: number | null;
+  n: number;
+  minN: number;
+  bandwidth: number | null;
+  r2: number;
+}
+
+export type StrainIrfResult = StrainIrf | Insufficient;
+
+/**
+ * Recovery on the last K days of strain, controlling for sleep, weekday and
+ * month. HAC errors by way of `distributedLag`'s default: this is a daily
+ * series regressed on its own recent past, which is exactly the design where
+ * HC1 reports bands about a third too narrow (§6.2).
+ */
+export function strainImpulseResponse(
+  days: DayRecord[],
+  options: { maxLag?: number; minN?: number } = {},
+): StrainIrfResult {
+  const { maxLag = 7, minN = 150 } = options;
+  const fit = distributedLag({
+    y: column(days, 'recovery'),
+    x: column(days, 'strain'),
+    maxLag,
+    controls: [
+      { name: 'sleepHours', values: column(days, 'sleepHours') },
+      ...weekdayFixedEffects(days),
+      ...monthFixedEffects(days),
+    ],
+    minN,
+  });
+  if (!fit.ok) return fit;
+
+  const q = benjaminiHochberg(fit.lags.map((l) => l.p));
+  const lags: StrainLag[] = fit.lags.map((lag, i) => ({ ...lag, q: q[i].q }));
+  const biting = lags.filter((l) => l.coef < 0 && l.q != null && l.q <= 0.05);
+
+  return {
+    ok: true,
+    lags,
+    cumulative: fit.cumulative,
+    lastLagThatBites: biting.length ? Math.max(...biting.map((l) => l.lag)) : null,
+    n: fit.n,
+    minN: fit.minN,
+    bandwidth: fit.fit.bandwidth,
+    r2: fit.r2,
+  };
+}
+
+/* ------------------------- 2. Hábitos ajustados --------------------------- */
+
+export interface AdjustedHabit extends Estimate {
+  question: string;
+  shortLabel: string;
+  /** Benjamini–Hochberg q over the family of journal questions. */
+  q: number | null;
+  nYes: number;
+  nNo: number;
+}
+
+export interface AdjustedHabits {
+  ok: true;
+  habits: AdjustedHabit[];
+  /** Questions left out for lack of variation or too many unanswered days. */
+  skipped: string[];
+  fit: OlsFit;
+  n: number;
+  minN: number;
+  /** Index of the controls inside `fit.terms`, for the elasticity card. */
+  slots: { sleep: number; strain: number; bedtime: number };
+}
+
+export type AdjustedHabitsResult = AdjustedHabits | Insufficient;
+
+export interface AdjustedHabitsOptions {
+  target?: 'recovery' | 'recoveryNext';
+  minN?: number;
+  /** Answers needed in each group before a question earns a column. */
+  minGroup?: number;
+  /** Share of the window a question must be answered on to stay in. */
+  minCoverage?: number;
+}
+
+/**
+ * Every journal boolean at once, plus sleep hours, yesterday's strain, bedtime,
+ * and weekday and month fixed effects.
+ *
+ * This is the panel the univariate table cannot be: alcohol arrives with the
+ * weekend, with a late bedtime and with less sleep, and a difference of means
+ * hands the whole joint effect to whichever variable you happened to ask about.
+ * Here each coefficient is the effect of that habit among days that match on
+ * everything else in the model.
+ *
+ * A question is dropped when it lacks variation, and — this one matters for
+ * real exports — when it went unanswered on too much of the window. Listwise
+ * deletion is per row, so one sparsely answered question can take the whole
+ * sample down with it.
+ */
+export function adjustedHabitEffects(
+  days: DayRecord[],
+  questions: string[],
+  options: AdjustedHabitsOptions = {},
+): AdjustedHabitsResult {
+  const { target = 'recovery', minN = 150, minGroup = 8, minCoverage = 0.6 } = options;
+  const answerable = days.filter((d) => d[target] != null).length;
+
+  const kept: { question: string; nYes: number; nNo: number }[] = [];
+  const skipped: string[] = [];
+  for (const question of questions) {
+    let nYes = 0;
+    let nNo = 0;
+    for (const day of days) {
+      if (day[target] == null) continue;
+      const answer = day.journal[question];
+      if (answer === true) nYes++;
+      else if (answer === false) nNo++;
+    }
+    const covered = answerable > 0 ? (nYes + nNo) / answerable : 0;
+    if (nYes >= minGroup && nNo >= minGroup && covered >= minCoverage) {
+      kept.push({ question, nYes, nNo });
+    } else skipped.push(question);
+  }
+
+  const habitColumns: DesignColumn[] = kept.map((k, i) => ({
+    name: `habit_${i}`,
+    values: days.map((d) => {
+      const answer = d.journal[k.question];
+      return answer === undefined ? null : answer ? 1 : 0;
+    }),
+  }));
+  const controls: DesignColumn[] = [
+    { name: 'sleepHours', values: column(days, 'sleepHours') },
+    { name: 'strainPrev', values: column(days, 'strainPrev') },
+    { name: 'bedtimeHours', values: bedtimeHours(days) },
+    ...weekdayFixedEffects(days),
+    ...monthFixedEffects(days),
+  ];
+  const design = [...habitColumns, ...controls];
+
+  const fit = ols(
+    column(days, target),
+    days.map((_, i) => design.map((c) => c.values[i])),
+    {
+      names: design.map((c) => c.name),
+      // Daily series: yesterday's unmodelled shock is in today's residual too.
+      vcov: 'hac',
+      times: dayClock(days),
+      minN,
+    },
+  );
+  if (!fit.ok) return fit;
+
+  const slotOf = (name: string) => fit.terms.findIndex((t) => t.name === name);
+  const rows = kept
+    .map((k, i) => ({ ...k, index: slotOf(`habit_${i}`) }))
+    .filter((r) => r.index >= 0);
+  const q = benjaminiHochberg(rows.map((r) => fit.terms[r.index].p));
+
+  return {
+    ok: true,
+    habits: rows
+      .map((r, i) => ({
+        question: r.question,
+        shortLabel: shortenQuestion(r.question),
+        ...stripTermName(fit.terms[r.index]),
+        q: q[i].q,
+        nYes: r.nYes,
+        nNo: r.nNo,
+      }))
+      .sort((a, b) => Math.abs(b.coef) - Math.abs(a.coef)),
+    skipped,
+    fit,
+    n: fit.n,
+    minN: fit.minN,
+    slots: {
+      sleep: slotOf('sleepHours'),
+      strain: slotOf('strainPrev'),
+      bedtime: slotOf('bedtimeHours'),
+    },
+  };
+}
+
+const stripTermName = ({ coef, se, t, p, ciLow, ciHigh }: Estimate): Estimate => ({
+  coef,
+  se,
+  t,
+  p,
+  ciLow,
+  ciHigh,
+});
+
+/* ----------------- 3. Elasticities and the substitution rate ---------------- */
+
+export interface Elasticity extends Estimate {
+  /** Key into `messages.overview.elasticity`. */
+  id: ElasticityId;
+  q: number | null;
+}
+
+export type ElasticityId = 'strain' | 'sleep' | 'bedtime';
+
+export interface Elasticities {
+  ok: true;
+  terms: Elasticity[];
+  /**
+   * Extra sleep hours that offset one unit of strain, −β_strain/β_sleep, with
+   * a delta-method interval. Unidentified when β_sleep covers zero.
+   */
+  substitution: RatioResult;
+  n: number;
+  minN: number;
+}
+
+export type ElasticitiesResult = Elasticities | Insufficient;
+
+/**
+ * Reads the three control coefficients out of the adjusted habits model and
+ * turns them into the marginal statements a reader can act on, plus the rate
+ * at which sleep buys back strain.
+ */
+export function recoveryElasticities(model: AdjustedHabitsResult): ElasticitiesResult {
+  if (!model.ok) return model;
+  const { fit, slots } = model;
+
+  const spec = (
+    [
+      { id: 'strain', index: slots.strain },
+      { id: 'sleep', index: slots.sleep },
+      { id: 'bedtime', index: slots.bedtime },
+    ] satisfies { id: ElasticityId; index: number }[]
+  ).filter((s) => s.index >= 0);
+
+  const q = benjaminiHochberg(spec.map((s) => fit.terms[s.index].p));
+
+  return {
+    ok: true,
+    terms: spec.map((s, i) => ({
+      id: s.id,
+      ...stripTermName(fit.terms[s.index]),
+      q: q[i].q,
+    })),
+    substitution: ratio(fit, slots.strain, slots.sleep, { negate: true }),
+    n: model.n,
+    minN: model.minN,
+  };
+}
+
+/* --------------------------- 4. Dose and response -------------------------- */
+
+export interface DoseResponse {
+  ok: true;
+  points: { x: number; y: number }[];
+  n: number;
+  minN: number;
+}
+
+export type DoseResponseResult = DoseResponse | Insufficient;
+
+/**
+ * Pairwise-complete points for a binscatter. No summary is computed here: the
+ * bins and the LOESS curve are readings of these same points and belong to the
+ * chart, the way `ScatterChart` fits its own line.
+ */
+export function doseResponse(
+  days: DayRecord[],
+  x: keyof DayRecord,
+  y: keyof DayRecord,
+  minN = 60,
+): DoseResponseResult {
+  const points: { x: number; y: number }[] = [];
+  for (const day of days) {
+    const a = day[x] as number | null;
+    const b = day[y] as number | null;
+    if (a != null && b != null && Number.isFinite(a) && Number.isFinite(b)) {
+      points.push({ x: a, y: b });
+    }
+  }
+  return points.length < minN
+    ? insufficient(points.length, minN)
+    : { ok: true, points, n: points.length, minN };
+}
+
+/* ------------------------- 5. Cambios de régimen -------------------------- */
+
+/**
+ * Level shifts in the 28-day HRV baseline.
+ *
+ * `minSegment` is 28 on purpose. The series is a 28-day rolling mean, so two
+ * adjacent values share 27 of their 28 observations; allowing a segment shorter
+ * than the window would let the smoother's own inertia be reported as a regime.
+ */
+export function hrvRegimeBreaks(days: DayRecord[], minN = 90): ChangePointsResult {
+  return changePoints(
+    column(days, 'hrv28'),
+    days.map((d) => d.day),
+    { minSegment: 28, maxPoints: 4, minN },
+  );
+}
+
+/** Two-sided CUSUM on resting heart rate against the window's own baseline. */
+export function rhrControlChart(days: DayRecord[], minN = 45): CusumResult {
+  return cusum(
+    column(days, 'rhr'),
+    days.map((d) => d.day),
+    { k: 0.5, h: 5, minN },
+  );
+}
+
+/* -------------------------------- 6. Rhythms ------------------------------- */
+
+export interface Rhythm {
+  key: 'recovery' | 'hrv';
+  spectrum: PeriodogramResult;
+  /** BH-adjusted false-alarm probability of the peak, across the two series. */
+  q: number | null;
+  /** The weekly line, when the spectrum clears its own threshold there. */
+  weeklyIsReal: boolean;
+}
+
+/**
+ * Lomb–Scargle over recovery and HRV. Two series tested at once is a family, so
+ * the peak false-alarm probabilities go through BH — even though each one is
+ * already corrected across frequencies inside `lombScargle`.
+ */
+export function rhythms(days: DayRecord[], minN = 60): Rhythm[] {
+  const specs: { key: 'recovery' | 'hrv' }[] = [{ key: 'recovery' }, { key: 'hrv' }];
+  const spectra = specs.map((s) =>
+    lombScargle(dayClock(days), column(days, s.key), { minN, faProbability: 0.05 }),
+  );
+  const q = benjaminiHochberg(spectra.map((s) => (s.ok && s.peak ? s.peak.fap : null)));
+  return specs.map((s, i) => {
+    const spectrum = spectra[i];
+    const weekly =
+      spectrum.ok &&
+      spectrum.points
+        .filter((p) => Math.abs(p.period - 7) < 0.35)
+        .some((p) => p.power > spectrum.faLevel);
+    return { ...s, spectrum, q: q[i].q, weeklyIsReal: weekly };
+  });
 }

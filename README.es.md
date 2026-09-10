@@ -4,9 +4,9 @@
 
 **Tu export de WHOOP, analizado en serio. En tu navegador. Nada se sube a ningún lado.**
 
-[Demo](https://USER.github.io/whoop-lab/) · [Read this in English](README.md)
+**[Abrir la demo →](https://USER.github.io/whoop-lab/?demo=1)** · [Read this in English](README.md)
 
-![Vista general de WHOOP Lab](docs/img/overview-light.png)
+![Vista general de WHOOP Lab](docs/img/overview-light.es.png)
 
 </div>
 
@@ -17,21 +17,50 @@ vistas. El export, en cambio, trae todo: recuperación, HRV, pulso en reposo,
 strain, arquitectura completa del sueño y cada respuesta del diario que hayas
 dado.
 
-WHOOP Lab lee ese export y muestra lo que la app no:
+Hay varias herramientas que te vuelven a dibujar ese export. Esto es lo que
+ninguna hace:
 
-- **Líneas base móviles.** Tendencia de recuperación a 7 días y base de HRV a 28
-  días con z-score. Un dato de HRV aislado no dice nada sin tu propia
-  distribución.
-- **Strain de hoy contra recuperación de mañana.** Dispersión con recta ajustada
-  y correlación, para ver cuánto te cuesta de verdad una sesión dura.
-- **Efecto de los hábitos.** Para cada pregunta del diario, la diferencia en
-  recuperación entre los días que respondiste sí y los que respondiste no, con
-  tamaños de muestra y un estadístico t de Welch. Este es el análisis que hace
-  que valga la pena pedir el export.
-- **Carga aguda sobre carga crónica.** Strain a 7 días sobre strain a 28 días,
-  el indicador estándar para detectar que estás subiendo volumen demasiado
-  rápido.
-- **Tabla diaria consolidada** para copiar y pegar en Excel, R o Stata.
+- **El efecto de los hábitos sale de una regresión, no de una diferencia de
+  medias.** Todas las preguntas del diario entran en un solo modelo a la vez,
+  junto con horas de sueño, strain de ayer, hora de acostarte y efectos fijos de
+  día de la semana y mes. La diferencia importa: el alcohol llega junto con el fin
+  de semana, con acostarse tarde y con dormir menos, y una diferencia de medias le
+  atribuye a la bebida el efecto conjunto de las cuatro cosas. Las dos
+  estimaciones se muestran una al lado de la otra para que veas la brecha.
+- **Función de respuesta al impulso del strain.** La recuperación de hoy contra el
+  strain de cada uno de los siete días anteriores, en una sola regresión de
+  rezagos distribuidos, con el multiplicador acumulado y su banda de confianza.
+  Contesta «cuántos días me dura una sesión dura» en vez de «¿el strain
+  correlaciona con la recuperación?».
+- **Errores estándar HAC (Newey–West) donde corresponde.** El residuo de un día
+  arrastra el del anterior, y los errores corrientes sobre una serie diaria salen
+  alrededor de un tercio más angostos de lo que deberían — es decir, un tercio más
+  convincentes.
+- **Control de multiplicidad.** Con una docena de preguntas puestas a prueba a la
+  vez, un falso positivo a p < 0,05 es el resultado esperado, así que los
+  coeficientes se marcan por **q** de Benjamini–Hochberg y nunca por p crudo.
+- **Lee exports localizados sin tocar nada.** Una cuenta en español recibe
+  `sueño.csv` y `entrenamientos.csv` con todos los encabezados traducidos. El
+  parser compara subcadenas del encabezado sin acentos en vez de nombres exactos,
+  así que entran las dos variantes sin renombrar archivos.
+- **Interfaz en español e inglés**, detectada desde tu navegador y conmutable en
+  el encabezado. El formato de números sigue al idioma, para que una coma decimal
+  nunca aparezca en una página en inglés.
+
+Además de las líneas base móviles, los z-scores, la razón de carga aguda sobre
+crónica, una curva de dosis y respuesta con ajuste LOESS, un periodograma de
+Lomb–Scargle que tolera los huecos de tu export y una tabla diaria consolidada
+para pegar directo en Excel, R o Stata.
+
+Todo lo de abajo son datos sintéticos de la demo: 420 días generados en tu
+navegador con relaciones reales incorporadas.
+
+|                                                                          |                                                              |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| ![Efecto de los hábitos, ajustado y sin ajustar](docs/img/habits.es.png) | ![Respuesta al impulso del strain](docs/img/training.es.png) |
+| **Hábitos.** Las mismas preguntas estimadas de dos maneras.              | **Entrenamiento.** Cuánto dura de verdad una sesión dura.    |
+| ![Dosis y respuesta del sueño](docs/img/sleep.es.png)                    | ![Vista general en oscuro](docs/img/overview-dark.es.png)    |
+| **Sueño.** Dónde las horas de más dejan de comprar recuperación.         | **Modo oscuro**, siguiendo al sistema o a tu elección.       |
 
 ## Privacidad
 
@@ -39,6 +68,10 @@ Todo corre en el cliente. Los CSV se parsean en el navegador, se guardan en
 IndexedDB de tu propia máquina y no viajan a ningún servidor. No hay backend, no
 hay analítica y no hay una sola petición de red después de cargar la página. Lo
 puedes verificar leyendo `src/lib/whoop/` en unos diez minutos.
+
+La demo de `?demo=1` genera sus datos en el momento y a propósito no escribe nada
+en IndexedDB, así que seguir ese enlace nunca toca un export que ya tuvieras
+guardado.
 
 El `.gitignore` además bloquea `*.csv` y toda la carpeta `data/`, para que no
 subas tus datos de salud por accidente mientras trabajas en el repo.
@@ -75,8 +108,9 @@ npm install
 npm run dev
 ```
 
-Suelta tu ZIP en la página, o dale a **mira una demo con datos sintéticos** para
-explorar con datos generados que tienen relaciones reales incorporadas.
+Suelta tu ZIP en la página, o ábrela con `?demo=1` —o dale a **mira una demo con
+datos sintéticos**— para explorar con datos generados que tienen relaciones reales
+incorporadas.
 
 ```bash
 npm run build      # typecheck + bundle de producción
@@ -104,23 +138,36 @@ versionan, y `src/test/fixture.test.ts` corre el pipeline completo sobre ellos.
 
 ## Decisiones técnicas
 
-| Decisión                                           | Razón                                                                                                                                  |
-| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| React 19 + TypeScript estricto + Vite              | Aburrido, rápido, y el sistema de tipos hace trabajo real en `src/lib/whoop/types.ts`                                                  |
-| Gráficas SVG propias sobre `d3-scale` / `d3-shape` | Una librería de charts habría que pelearla para conservar esta estética. d3 pone la matemática; los componentes ponen los píxeles      |
-| CSS plano con custom properties                    | Toda la paleta vive en `src/styles/tokens.css`. Las gráficas resuelven colores de los mismos tokens, así claro y oscuro no se duplican |
-| Zustand                                            | Un store pequeño, sin ceremonia                                                                                                        |
-| IndexedDB con `idb-keyval`                         | Un diario de varios años se pasa del presupuesto de localStorage                                                                       |
+| Decisión                                           | Razón                                                                                                                                                   |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| React 19 + TypeScript estricto + Vite              | Aburrido, rápido, y el sistema de tipos hace trabajo real en `src/lib/whoop/types.ts`                                                                   |
+| Econometría escrita a mano en `src/lib/econ/`      | Mínimos cuadrados por QR, covarianza HAC y HC1, rezagos distribuidos, LOESS, Lomb–Scargle. Ninguna dependencia hace esto en un tamaño que valga la pena |
+| Gráficas SVG propias sobre `d3-scale` / `d3-shape` | Una librería de charts habría que pelearla para conservar esta estética. d3 pone la matemática; los componentes ponen los píxeles                       |
+| CSS plano con custom properties                    | Toda la paleta vive en `src/styles/tokens.css`. Las gráficas resuelven colores de los mismos tokens, así claro y oscuro no se duplican                  |
+| Dos objetos de mensajes tipados, sin librería i18n | `Messages` es `typeof es`, así que una clave agregada en un idioma y olvidada en el otro falla en `npm run typecheck` en vez de llegar a producción     |
+| Zustand                                            | Un store pequeño, sin ceremonia                                                                                                                         |
+| IndexedDB con `idb-keyval`                         | Un diario de varios años se pasa del presupuesto de localStorage                                                                                        |
+
+La descarga inicial es de **82 kB gzip** (chunk de entrada más CSS), de los cuales
+React son 61 kB. Cada pestaña es un chunk diferido aparte, así que una primera
+visita paga la pantalla de importación y nada más, y el parser de CSV —JSZip y
+PapaParse, 40 kB gzip entre los dos— se carga solo cuando de verdad sueltas un
+archivo. El mapa completo está en
+[docs/arquitectura.md](docs/arquitectura.md#el-mapa-de-chunks).
 
 ## Estructura
 
 ```
 src/
   lib/whoop/     mapeo de columnas, parseo de CSV, modelo de día
+  lib/econ/      MCO con HAC/HC1, rezagos distribuidos, método delta, BH,
+                 binscatter + LOESS, CUSUM + puntos de cambio, Lomb–Scargle
+  lib/i18n/      los catálogos de mensajes en español e inglés, y el hook
   lib/           estadística, formato, métricas derivadas, demo, storage
-  charts/        TimeSeries, StackedBar, Scatter, HBar, CalendarHeatmap, Sparkline
-  components/    Panel, KpiCard, Legend, Segmented, ImportView
-  views/         un archivo por pestaña
+  charts/        TimeSeries, StackedBar, Scatter, BinScatter, Coefficient,
+                 Irf, Spectrum, HBar, CalendarHeatmap, Sparkline
+  components/    Panel, KpiCard, Legend, Segmented, ImportView, ViewSkeleton
+  views/         un archivo por pestaña, cada uno su propio chunk diferido
   state/         store de zustand y el selector de rango
   test/          pruebas, y el fixture anonimizado en test/fixtures/
 scripts/         herramientas de mantenimiento (make-fixture.ts)
@@ -140,8 +187,10 @@ entrada. Ver [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Aviso
 
 Esto es una herramienta de visualización, no un dispositivo médico, y no está
-afiliada ni respaldada por WHOOP. Las correlaciones que muestra son
-observacionales. Nada de esto es consejo médico.
+afiliada ni respaldada por WHOOP. Todo lo que muestra es observacional: un
+coeficiente acá es la asociación que queda después de los controles del modelo, y
+eso no es lo mismo que lo que pasaría si cambiaras el hábito. Nada de esto es
+consejo médico.
 
 ## Licencia
 

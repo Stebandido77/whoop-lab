@@ -10,6 +10,7 @@ import {
   type ChartDatum,
   type TooltipState,
 } from './primitives';
+import { useMessages } from '@/lib/i18n';
 
 export interface StackLayer {
   key: string;
@@ -36,13 +37,14 @@ export function StackedBarChart({
   formatAxis = (v) => `${Math.round(v / 60)}h`,
 }: StackedBarChartProps) {
   const [ref, width] = useElementWidth<HTMLDivElement>();
+  const m = useMessages();
   const color = useResolvedColor();
   const [tip, setTip] = useState<TooltipState | null>(null);
 
   if (!data.length) {
     return (
       <div className="chart" ref={ref}>
-        <p className="empty">Sin datos en este rango</p>
+        <p className="empty">{m.charts.noData}</p>
       </div>
     );
   }
@@ -81,7 +83,7 @@ export function StackedBarChart({
             </div>
           ))}
           <div>
-            Total <b>{formatValue(totals[i])}</b>
+            {m.charts.total} <b>{formatValue(totals[i])}</b>
           </div>
         </>
       ),

@@ -12,8 +12,15 @@ de valor del proyecto.
 ## Idioma
 
 - **Código, nombres de variables, tipos y comentarios: inglés.**
-- **Texto visible para la persona usuaria y documentación en `docs/`: español.**
+- **Documentación en `docs/`: español.**
+- **Texto visible para la persona usuaria: en `src/lib/i18n/`, en los dos
+  idiomas.** Nunca escribas una cadena visible dentro de un componente, de
+  `metrics.ts` ni de `econ/`: van con id o con código y se traducen arriba.
+  `es.tsx` define la forma del catálogo, `en.tsx` la satisface, y el compilador
+  reclama la clave que falte.
 - README raíz en inglés; `README.es.md` en español. Si cambias uno, cambia el otro.
+  Las capturas de `docs/img/` van por duplicado: `x.png` en inglés y `x.es.png` en
+  español.
 
 ## Reglas de arquitectura
 
@@ -35,9 +42,12 @@ de valor del proyecto.
 5. **El día de un ciclo es la mañana en que viste el score.** Se toma de
    `Wake onset`; si falta, se desplaza el `Cycle start time` de la noche. Esa
    convención está en `cycleDay` y de ella dependen todos los lags.
-6. **Sin dependencias nuevas sin justificación.** El bundle actual está por
-   debajo de 130 kB gzip. Si una librería nueva no gana más de lo que pesa, no
-   entra.
+6. **Sin dependencias nuevas sin justificación.** La carga inicial —el chunk de
+   entrada más el CSS— está por debajo de 130 kB gzip, y ahí es donde se mide el
+   presupuesto. Cada pestaña es un chunk diferido aparte y el parser de CSV solo
+   se descarga al soltar un archivo, así que una dependencia nueva pesa según
+   dónde caiga: en el chunk de entrada cuenta entera. Si una librería no gana más
+   de lo que pesa, no entra. El mapa de chunks está en `docs/arquitectura.md`.
 
 ## Antes de dar por terminado un cambio
 
@@ -55,10 +65,11 @@ silencio, porque un error ahí produce gráficas que se ven bien y están mal.
    calcúlalo en `finalize` o `attachWindows` de `model.ts` y escribe una prueba.
 2. Si es un agregado sobre el rango, ponlo en `src/lib/metrics.ts` con su tipo
    de retorno explícito.
-3. Móntalo en la vista con `<Panel>` y el componente de gráfica que corresponda.
+3. Los textos del panel van a `src/lib/i18n/es.tsx` **y** a `en.tsx`, nunca al JSX.
+4. Móntalo en la vista con `<Panel>` y el componente de gráfica que corresponda.
    Si ninguno sirve, primero pregúntate si un `TimeSeriesChart` con otra serie
    resuelve; recién después crea un componente nuevo en `src/charts/`.
-4. Escribe el subtítulo del panel diciendo **qué significa el número y qué no**.
+5. Escribe el subtítulo del panel diciendo **qué significa el número y qué no**.
    Los subtítulos son parte del producto, no decoración: el objetivo es que la
    persona interprete bien, no que se impresione.
 

@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { buildDayRecords, journalQuestions } from '@/lib/whoop/model';
 import { emptyExport, type DayRecord, type WhoopExport } from '@/lib/whoop/types';
+import { setFormatLocale } from '@/lib/format';
+import { initialLang, storeLang, type Lang } from '@/lib/i18n/core';
 import { clearExport, saveExport } from '@/lib/storage';
 
 export type RangeDays = 30 | 90 | 180 | 365 | 0;
@@ -14,22 +16,18 @@ export type TabId = 'overview' | 'recovery' | 'sleep' | 'training' | 'habits' | 
  */
 export type ExportSource = 'file' | 'demo' | 'local';
 
-export const RANGES: { value: RangeDays; label: string }[] = [
-  { value: 30, label: '30d' },
-  { value: 90, label: '90d' },
-  { value: 180, label: '6m' },
-  { value: 365, label: '1a' },
-  { value: 0, label: 'Todo' },
-];
+/** Ids only. The labels live in the message catalogue, keyed by these. */
+export const RANGES: RangeDays[] = [30, 90, 180, 365, 0];
+export const TABS: TabId[] = ['overview', 'recovery', 'sleep', 'training', 'habits', 'data'];
 
-export const TABS: { id: TabId; label: string }[] = [
-  { id: 'overview', label: 'Resumen' },
-  { id: 'recovery', label: 'Recuperación' },
-  { id: 'sleep', label: 'Sueño' },
-  { id: 'training', label: 'Entrenamiento' },
-  { id: 'habits', label: 'Hábitos' },
-  { id: 'data', label: 'Datos' },
-];
+/** `0` is the open-ended range, so it cannot be a numeric key. */
+export const RANGE_KEYS = {
+  30: 'd30',
+  90: 'd90',
+  180: 'd180',
+  365: 'd365',
+  0: 'all',
+} as const satisfies Record<RangeDays, string>;
 
 interface State {
   raw: WhoopExport;
@@ -38,12 +36,17 @@ interface State {
   range: RangeDays;
   tab: TabId;
   source: ExportSource;
+  lang: Lang;
   loaded: boolean;
   setExport: (data: WhoopExport, options?: { source?: ExportSource; persist?: boolean }) => void;
   setRange: (range: RangeDays) => void;
   setTab: (tab: TabId) => void;
+  setLang: (lang: Lang) => void;
   reset: () => void;
 }
+
+const startingLang = initialLang();
+setFormatLocale(startingLang);
 
 export const useStore = create<State>((set) => ({
   raw: emptyExport(),
@@ -52,6 +55,7 @@ export const useStore = create<State>((set) => ({
   range: 365,
   tab: 'overview',
   source: 'file',
+  lang: startingLang,
   loaded: false,
   setExport: (data, options) => {
     if (options?.persist) void saveExport(data);
@@ -65,8 +69,24 @@ export const useStore = create<State>((set) => ({
   },
   setRange: (range) => set({ range }),
   setTab: (tab) => set({ tab }),
+  /**
+   * The number locale moves before the state does, so the re-render this
+   * triggers already formats with the new decimal separator. Formatters are
+   * called from render and read the locale at call time; see `lib/format.ts`.
+   */
+  setLang: (lang) => {
+    setFormatLocale(lang);
+    storeLang(lang);
+    document.documentElement.lang = lang;
+    set({ lang });
+  },
+  /**
+   * Unload whatever is on screen and go back to the import screen. The cached
+   * export is cleared only when that is what is being unloaded: a demo link or
+   * a folder in `data/` has no business deleting somebody's stored import.
+   */
   reset: () => {
-    void clearExport();
+    if (useStore.getState().source === 'file') void clearExport();
     set({
       raw: emptyExport(),
       allDays: [],

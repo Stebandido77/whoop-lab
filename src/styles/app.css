@@ -431,6 +431,35 @@ th.num {
   padding: 26px 0;
   text-align: center;
 }
+.demo-note {
+  border-left: 3px solid var(--mid);
+}
+
+/*
+ * Placeholder panels while a tab's chunk is in flight. They hold the height the
+ * real panels will take, so arriving content replaces a box instead of pushing
+ * the page down. The pulse is slow on purpose: a fast one reads as an error.
+ */
+.skeleton {
+  background: var(--panel-2);
+  border-color: var(--rule-soft);
+  animation: skeleton-pulse 1.6s ease-in-out infinite;
+}
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
 .callout {
   background: var(--panel-2);
   border: 1px solid var(--rule);

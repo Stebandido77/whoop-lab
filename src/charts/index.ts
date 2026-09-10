@@ -5,3 +5,7 @@ export * from './ScatterChart';
 export * from './HBarChart';
 export * from './CalendarHeatmap';
 export * from './Sparkline';
+export * from './CoefficientPlot';
+export * from './IrfChart';
+export * from './BinScatterChart';
+export * from './SpectrumChart';

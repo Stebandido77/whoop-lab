@@ -1,5 +1,6 @@
 import { f1 } from '@/lib/format';
 import { useElementWidth, useResolvedColor } from './primitives';
+import { useMessages } from '@/lib/i18n';
 
 export interface HBarRow {
   label: string;
@@ -28,15 +29,16 @@ export function HBarChart({
   format = f1,
   diverging = false,
   rowHeight = 26,
-  emptyMessage = 'Sin suficientes observaciones',
+  emptyMessage,
 }: HBarChartProps) {
   const [ref, width] = useElementWidth<HTMLDivElement>();
+  const m = useMessages();
   const color = useResolvedColor();
 
   if (!rows.length) {
     return (
       <div className="chart" ref={ref}>
-        <p className="empty">{emptyMessage}</p>
+        <p className="empty">{emptyMessage ?? m.charts.noObservations}</p>
       </div>
     );
   }

@@ -11,8 +11,10 @@ import {
   type ChartDatum,
   type GuideLine,
   type Series,
+  type SeriesMarker,
   type TooltipState,
 } from './primitives';
+import { useMessages } from '@/lib/i18n';
 
 export interface TimeSeriesChartProps {
   data: ChartDatum[];
@@ -22,6 +24,8 @@ export interface TimeSeriesChartProps {
   yMax?: number;
   formatY?: (value: number | null) => string;
   guides?: GuideLine[];
+  /** Dated annotations: regime breaks and control-chart signals. */
+  markers?: SeriesMarker[];
   emptyMessage?: string;
 }
 
@@ -40,9 +44,11 @@ export function TimeSeriesChart({
   yMax,
   formatY = f0,
   guides = [],
-  emptyMessage = 'Sin datos en este rango',
+  markers = [],
+  emptyMessage,
 }: TimeSeriesChartProps) {
   const [ref, width] = useElementWidth<HTMLDivElement>();
+  const m = useMessages();
   const color = useResolvedColor();
   const [tip, setTip] = useState<TooltipState | null>(null);
 
@@ -52,7 +58,7 @@ export function TimeSeriesChart({
   if (!data.length || !values.length) {
     return (
       <div className="chart" ref={ref}>
-        <p className="empty">{emptyMessage}</p>
+        <p className="empty">{emptyMessage ?? m.charts.noData}</p>
       </div>
     );
   }
@@ -91,6 +97,13 @@ export function TimeSeriesChart({
       .y0(MARGIN.top + plotHeight)
       .y1((d) => y(numeric(d, key)!))(data) ?? '';
 
+  const indexOfDay = new Map(data.map((d, i) => [d.day, i]));
+  const placed = markers
+    .map((m) => ({ marker: m, index: indexOfDay.get(m.day) }))
+    .filter((m): m is { marker: SeriesMarker; index: number } => m.index != null);
+  const breaks = placed.filter((m) => m.marker.kind === 'break');
+  const flags = placed.filter((m) => m.marker.kind !== 'break');
+
   const onMove = (event: React.MouseEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const px = ((event.clientX - rect.left) * width) / rect.width;
@@ -119,7 +132,7 @@ export function TimeSeriesChart({
       html: (
         <>
           <b>{fmtDayLong(datum.day)}</b>
-          {rows.length ? rows : <div>sin datos</div>}
+          {rows.length ? rows : <div>{m.charts.noDataShort}</div>}
         </>
       ),
     });
@@ -170,6 +183,32 @@ export function TimeSeriesChart({
               opacity={0.7}
             />
           ))}
+
+        {breaks.map(({ marker, index }) => (
+          <g key={`break-${marker.day}`}>
+            <line
+              x1={x(index)}
+              x2={x(index)}
+              y1={MARGIN.top}
+              y2={MARGIN.top + plotHeight}
+              stroke={color(marker.color ?? '--ink')}
+              strokeWidth={1.2}
+              strokeDasharray="5 3"
+              opacity={0.55}
+            />
+            {marker.label && (
+              <text
+                x={x(index) + 4}
+                y={MARGIN.top + 9}
+                fontSize={10}
+                fill={color(marker.color ?? '--ink')}
+                opacity={0.85}
+              >
+                {marker.label}
+              </text>
+            )}
+          </g>
+        ))}
 
         {data.map((d, i) =>
           i % labelEvery === 0 ? (
@@ -246,6 +285,20 @@ export function TimeSeriesChart({
                 opacity={s.opacity ?? 1}
               />
             </g>
+          );
+        })}
+
+        {flags.map(({ marker, index }) => {
+          const up = marker.kind === 'high';
+          const tip = up ? MARGIN.top + 1 : MARGIN.top + plotHeight - 1;
+          const base = up ? MARGIN.top + 7 : MARGIN.top + plotHeight - 7;
+          return (
+            <polygon
+              key={`flag-${marker.kind}-${marker.day}`}
+              points={`${x(index)},${tip} ${x(index) - 4},${base} ${x(index) + 4},${base}`}
+              fill={color(marker.color ?? (up ? '--lo' : '--hi'))}
+              opacity={0.9}
+            />
           );
         })}
       </svg>

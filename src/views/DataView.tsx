@@ -1,39 +1,47 @@
 import { useState } from 'react';
 import { Panel } from '@/components';
 import { f0, f1 } from '@/lib/format';
+import { useMessages, type Messages } from '@/lib/i18n';
 import type { DayRecord } from '@/lib/whoop/types';
 
+type ColumnKey = keyof Messages['data']['columns'];
+
 interface ColumnSpec {
-  key: keyof DayRecord;
-  label: string;
+  key: ColumnKey & keyof DayRecord;
   format: (v: number) => string;
 }
 
 const COLUMNS: ColumnSpec[] = [
-  { key: 'recovery', label: 'Recup %', format: f0 },
-  { key: 'hrv', label: 'HRV', format: f0 },
-  { key: 'rhr', label: 'RHR', format: f0 },
-  { key: 'strain', label: 'Strain', format: f1 },
-  { key: 'calories', label: 'Calorías', format: f0 },
-  { key: 'sleepHours', label: 'Sueño h', format: f1 },
-  { key: 'sleepEfficiency', label: 'Efic %', format: f0 },
-  { key: 'deep', label: 'Profundo', format: f0 },
-  { key: 'rem', label: 'REM', format: f0 },
-  { key: 'light', label: 'Ligero', format: f0 },
-  { key: 'awake', label: 'Despierto', format: f0 },
-  { key: 'sleepDebt', label: 'Deuda', format: f0 },
-  { key: 'sleepConsistency', label: 'Consist %', format: f0 },
-  { key: 'respiratoryRate', label: 'Resp', format: f1 },
-  { key: 'workoutCount', label: 'Actividades', format: f0 },
-  { key: 'workoutMinutes', label: 'Min activ.', format: f0 },
+  { key: 'recovery', format: f0 },
+  { key: 'hrv', format: f0 },
+  { key: 'rhr', format: f0 },
+  { key: 'strain', format: f1 },
+  { key: 'calories', format: f0 },
+  { key: 'sleepHours', format: f1 },
+  { key: 'sleepEfficiency', format: f0 },
+  { key: 'deep', format: f0 },
+  { key: 'rem', format: f0 },
+  { key: 'light', format: f0 },
+  { key: 'awake', format: f0 },
+  { key: 'sleepDebt', format: f0 },
+  { key: 'sleepConsistency', format: f0 },
+  { key: 'respiratoryRate', format: f1 },
+  { key: 'workoutCount', format: f0 },
+  { key: 'workoutMinutes', format: f0 },
 ];
 
 export function DataView({ days }: { days: DayRecord[] }) {
+  const m = useMessages();
   const [copied, setCopied] = useState(false);
 
+  /**
+   * Headers follow the interface language, values do not: these are raw numbers
+   * on their way to a spreadsheet or to R, and a locale-formatted decimal comma
+   * would arrive there as text.
+   */
   const toTsv = () =>
     [
-      ['Fecha', ...COLUMNS.map((c) => c.label)].join('\t'),
+      [m.data.date, ...COLUMNS.map((c) => m.data.columns[c.key])].join('\t'),
       ...days.map((d) =>
         [d.day, ...COLUMNS.map((c) => (d[c.key] == null ? '' : String(d[c.key])))].join('\t'),
       ),
@@ -57,25 +65,21 @@ export function DataView({ days }: { days: DayRecord[] }) {
 
   return (
     <div className="grid">
-      <Panel
-        span={12}
-        title="Tabla diaria consolidada"
-        subtitle="Los cuatro CSV unidos por día. Cópiala y pégala en Excel, Stata o R."
-      >
+      <Panel span={12} title={m.data.title} subtitle={m.data.subtitle}>
         <div className="controls" style={{ marginBottom: 10 }}>
           <button type="button" onClick={() => void copy()}>
-            Copiar como TSV
+            {m.data.copy}
           </button>
-          {copied && <span className="pill">Listo</span>}
+          {copied && <span className="pill">{m.data.copied}</span>}
         </div>
         <div className="table-box scroll-x">
           <table>
             <thead>
               <tr>
-                <th>Fecha</th>
+                <th>{m.data.date}</th>
                 {COLUMNS.map((c) => (
-                  <th key={String(c.key)} className="num">
-                    {c.label}
+                  <th key={c.key} className="num">
+                    {m.data.columns[c.key]}
                   </th>
                 ))}
               </tr>
@@ -87,7 +91,7 @@ export function DataView({ days }: { days: DayRecord[] }) {
                   {COLUMNS.map((c) => {
                     const value = d[c.key] as number | null;
                     return (
-                      <td key={String(c.key)} className="num">
+                      <td key={c.key} className="num">
                         {value == null ? '' : c.format(value)}
                       </td>
                     );

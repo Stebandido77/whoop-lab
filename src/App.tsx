@@ -1,17 +1,52 @@
-import { useEffect, useMemo } from 'react';
-import { ImportView, Segmented } from '@/components';
-import { fmtDayLong } from '@/lib/format';
+import { lazy, Suspense, useEffect, useMemo } from 'react';
+import { ImportView, Segmented, ViewSkeleton } from '@/components';
+import { count, fmtDayLong } from '@/lib/format';
+import { LANGS, useMessages } from '@/lib/i18n';
 import { loadExport } from '@/lib/storage';
-import { RANGES, selectWindow, TABS, useStore, type ExportSource, type TabId } from '@/state/store';
-import { DataView, HabitsView, OverviewView, RecoveryView, SleepView, TrainingView } from '@/views';
+import {
+  RANGE_KEYS,
+  RANGES,
+  selectWindow,
+  TABS,
+  useStore,
+  type RangeDays,
+  type TabId,
+} from '@/state/store';
 
-const SUBTITLES: Record<ExportSource, string> = {
-  file: 'tus datos, sin el filtro de la app',
-  demo: 'datos sintéticos de demostración',
-  local: 'datos locales de data/',
+/**
+ * One chunk per tab.
+ *
+ * The econometric panels are the heavy half of this application and every one of
+ * them sits below the fold of a tab nobody has opened yet, so paying for them on
+ * first paint bought nothing. Each view is imported the first time its tab is
+ * shown and cached by the browser from then on; `ViewSkeleton` holds the layout
+ * in the meantime. The chunk map is in docs/arquitectura.md.
+ */
+const VIEWS: Record<TabId, React.LazyExoticComponent<React.ComponentType<ViewProps>>> = {
+  overview: lazy(() => import('@/views/OverviewView').then((m) => ({ default: m.OverviewView }))),
+  recovery: lazy(() => import('@/views/RecoveryView').then((m) => ({ default: m.RecoveryView }))),
+  sleep: lazy(() => import('@/views/SleepView').then((m) => ({ default: m.SleepView }))),
+  training: lazy(() => import('@/views/TrainingView').then((m) => ({ default: m.TrainingView }))),
+  habits: lazy(() => import('@/views/HabitsView').then((m) => ({ default: m.HabitsView }))),
+  data: lazy(() => import('@/views/DataView').then((m) => ({ default: m.DataView }))),
 };
 
+/**
+ * Every view takes the same four props and ignores the ones it does not need,
+ * which is what lets the tab table above be a plain lookup instead of six
+ * branches in the JSX.
+ */
+interface ViewProps {
+  days: import('@/lib/whoop/types').DayRecord[];
+  previous: import('@/lib/whoop/types').DayRecord[];
+  questions: string[];
+}
+
+/** `?demo=1` — the link in the README, so a first visit lands on a full dashboard. */
+const wantsDemo = () => new URLSearchParams(window.location.search).get('demo') === '1';
+
 export default function App() {
+  const m = useMessages();
   const {
     allDays,
     questions,
@@ -19,17 +54,33 @@ export default function App() {
     range,
     tab,
     source,
+    lang,
     loaded,
     setExport,
     setRange,
     setTab,
+    setLang,
     reset,
   } = useStore();
+
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function boot() {
+      // A demo link wins over everything, including a cached import: somebody
+      // following it wants to see the dashboard, not their own data. Nothing is
+      // written to IndexedDB — `setExport` only persists when asked to — so the
+      // export already cached there is still waiting after a plain reload.
+      if (wantsDemo()) {
+        const { generateDemoExport } = await import('@/lib/demo');
+        if (!cancelled) setExport(generateDemoExport(), { source: 'demo' });
+        return;
+      }
+
       // In `npm run dev`, an export sitting in `data/` wins over the cache, so
       // the folder is the single source of truth while hacking. `import.meta.env.DEV`
       // is a compile-time constant: in a build this whole branch is dead code and
@@ -59,53 +110,68 @@ export default function App() {
 
   const { days, previous } = useMemo(() => selectWindow(allDays, range), [allDays, range]);
 
+  const langSwitch = (
+    <Segmented options={LANGS} value={lang} onChange={setLang} ariaLabel={m.app.langAria} />
+  );
+
   if (!loaded || !allDays.length) {
     return (
       <div className="wrap">
-        <Header subtitle={SUBTITLES.file} />
+        <Header subtitle={m.app.subtitle.file}>{langSwitch}</Header>
         <ImportView />
       </div>
     );
   }
 
+  const View = VIEWS[tab];
+
   return (
     <div className="wrap">
-      <Header subtitle={SUBTITLES[source]}>
-        <Segmented options={RANGES} value={range} onChange={setRange} ariaLabel="Rango de fechas" />
+      <Header subtitle={m.app.subtitle[source]}>
+        <Segmented
+          options={RANGES.map((value) => ({ value, label: m.ranges[RANGE_KEYS[value]] }))}
+          value={range}
+          onChange={(value: RangeDays) => setRange(value)}
+          ariaLabel={m.app.rangeAria}
+        />
+        {langSwitch}
         <button type="button" className="ghost" onClick={reset}>
-          Cargar otro export
+          {m.app.loadAnother}
         </button>
       </Header>
 
-      <nav className="tabs" role="tablist" aria-label="Secciones">
-        {TABS.map((t) => (
+      {source === 'demo' && <p className="callout demo-note">{m.app.demoNotice}</p>}
+
+      <nav className="tabs" role="tablist" aria-label={m.app.sectionsAria}>
+        {TABS.map((id) => (
           <button
-            key={t.id}
+            key={id}
             type="button"
             role="tab"
-            aria-selected={t.id === tab}
+            aria-selected={id === tab}
             onClick={() => {
-              setTab(t.id as TabId);
+              setTab(id);
               window.scrollTo(0, 0);
             }}
           >
-            {t.label}
+            {m.tabs[id]}
           </button>
         ))}
       </nav>
 
-      {tab === 'overview' && <OverviewView days={days} previous={previous} />}
-      {tab === 'recovery' && <RecoveryView days={days} />}
-      {tab === 'sleep' && <SleepView days={days} previous={previous} />}
-      {tab === 'training' && <TrainingView days={days} />}
-      {tab === 'habits' && <HabitsView days={days} questions={questions} />}
-      {tab === 'data' && <DataView days={days} />}
+      <Suspense fallback={<ViewSkeleton tab={tab} />}>
+        <View days={days} previous={previous} questions={questions} />
+      </Suspense>
 
       <footer>
-        {allDays.length} días entre {fmtDayLong(allDays[0].day)} y{' '}
-        {fmtDayLong(allDays[allDays.length - 1].day)} · {raw.cycles.length} ciclos,{' '}
-        {raw.workouts.length} actividades, {raw.journal.length} respuestas de diario · Todo se
-        calcula en tu navegador.
+        {m.app.footer(
+          count(allDays.length),
+          fmtDayLong(allDays[0].day),
+          fmtDayLong(allDays[allDays.length - 1].day),
+          count(raw.cycles.length),
+          count(raw.workouts.length),
+          count(raw.journal.length),
+        )}
       </footer>
     </div>
   );

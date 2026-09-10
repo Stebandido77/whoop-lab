@@ -9,6 +9,7 @@ import {
   useResolvedColor,
   type TooltipState,
 } from './primitives';
+import { useMessages } from '@/lib/i18n';
 
 export interface ScatterPoint {
   x: number;
@@ -44,6 +45,7 @@ export function ScatterChart({
   showFit = true,
 }: ScatterChartProps) {
   const [ref, width] = useElementWidth<HTMLDivElement>();
+  const m = useMessages();
   const color = useResolvedColor();
   const [tip, setTip] = useState<TooltipState | null>(null);
 
@@ -51,7 +53,7 @@ export function ScatterChart({
   if (usable.length < 3) {
     return (
       <div className="chart" ref={ref}>
-        <p className="empty">Faltan datos para cruzar estas variables</p>
+        <p className="empty">{m.charts.noPairs}</p>
       </div>
     );
   }

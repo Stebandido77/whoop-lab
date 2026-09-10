@@ -1,16 +1,10 @@
 import { useRef, useState } from 'react';
-import { readExportFiles } from '@/lib/whoop/parse';
-import { generateDemoExport } from '@/lib/demo';
+import { count } from '@/lib/format';
+import { useMessages } from '@/lib/i18n';
 import { useStore } from '@/state/store';
 
-const KIND_LABELS: Record<string, string> = {
-  cycles: 'ciclos',
-  sleeps: 'sueños',
-  workouts: 'actividades',
-  journal: 'respuestas de diario',
-};
-
 export function ImportView() {
+  const m = useMessages();
   const setExport = useStore((s) => s.setExport);
   const inputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -18,32 +12,34 @@ export function ImportView() {
 
   async function handle(files: FileList | null) {
     if (!files?.length) return;
-    setStatus('Leyendo…');
+    setStatus(m.import.reading);
     try {
+      // The parser drags in JSZip and PapaParse, together about a third of what
+      // the app used to ship on first paint, and neither is needed until a file
+      // actually lands. Loading it here costs a round trip nobody notices, since
+      // the reader has just committed to a drop and is already reading «Leyendo…».
+      const { readExportFiles } = await import('@/lib/whoop/parse');
       const { data, found } = await readExportFiles([...files]);
       if (!found.length) {
-        setStatus(
-          'Ese archivo no parece un export de WHOOP. Busca el ZIP del correo “Your WHOOP Export is Ready”.',
-        );
+        setStatus(m.import.notWhoop);
         return;
       }
-      setStatus(
-        found.map((f) => `${f.rows.toLocaleString('es-CO')} ${KIND_LABELS[f.kind]}`).join(' · '),
-      );
+      setStatus(found.map((f) => `${count(f.rows)} ${m.import.kinds[f.kind]}`).join(' · '));
       setExport(data, { persist: true });
     } catch (error) {
-      setStatus(`No pude leer el archivo: ${(error as Error).message}`);
+      setStatus(m.import.readError((error as Error).message));
     }
+  }
+
+  async function demo() {
+    const { generateDemoExport } = await import('@/lib/demo');
+    setExport(generateDemoExport(), { source: 'demo' });
   }
 
   return (
     <div className="intro">
-      <h2>Suelta aquí tu export de WHOOP.</h2>
-      <p>
-        El ZIP completo o los CSV sueltos: <code>physiological_cycles</code>, <code>sleeps</code>,{' '}
-        <code>workouts</code> y <code>journal_entries</code>. Todo se procesa en tu navegador; nada
-        sale de tu equipo.
-      </p>
+      <h2>{m.import.heading}</h2>
+      <p>{m.import.lead}</p>
 
       <button
         type="button"
@@ -61,8 +57,8 @@ export function ImportView() {
           void handle(e.dataTransfer.files);
         }}
       >
-        <strong>Arrastra el ZIP o haz clic para elegir archivos</strong>
-        <small>.zip o .csv — puedes soltar varios a la vez</small>
+        <strong>{m.import.dropTitle}</strong>
+        <small>{m.import.dropHint}</small>
       </button>
       <input
         ref={inputRef}
@@ -76,17 +72,16 @@ export function ImportView() {
       {status && <p className="filelog">{status}</p>}
 
       <p className="note">
-        ¿Todavía no pediste el export? En la app: <b>More → App Settings → Data Export</b>. Llega
-        por correo en menos de una hora. Mientras tanto,{' '}
-        <button
-          type="button"
-          className="ghost"
-          style={{ padding: '2px 8px' }}
-          onClick={() => setExport(generateDemoExport(), { source: 'demo' })}
-        >
-          mira una demo con datos sintéticos
-        </button>
-        .
+        {m.import.note(
+          <button
+            type="button"
+            className="ghost"
+            style={{ padding: '2px 8px' }}
+            onClick={() => void demo()}
+          >
+            {m.import.demoLink}
+          </button>,
+        )}
       </p>
     </div>
   );

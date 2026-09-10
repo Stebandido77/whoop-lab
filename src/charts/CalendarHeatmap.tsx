@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fmtDayLong, MONTHS, WEEKDAYS } from '@/lib/format';
+import { fmtDayLong, monthName, weekdayName } from '@/lib/format';
 import {
   numeric,
   tooltipStyle,
@@ -8,6 +8,7 @@ import {
   type ChartDatum,
   type TooltipState,
 } from './primitives';
+import { useMessages } from '@/lib/i18n';
 
 export interface CalendarHeatmapProps {
   data: (ChartDatum & { date: Date })[];
@@ -31,13 +32,14 @@ export function CalendarHeatmap({
   format = String,
 }: CalendarHeatmapProps) {
   const [ref, width] = useElementWidth<HTMLDivElement>();
+  const m = useMessages();
   const color = useResolvedColor();
   const [tip, setTip] = useState<TooltipState | null>(null);
 
   if (!data.length) {
     return (
       <div className="chart" ref={ref}>
-        <p className="empty">Sin datos en este rango</p>
+        <p className="empty">{m.charts.noData}</p>
       </div>
     );
   }
@@ -62,7 +64,7 @@ export function CalendarHeatmap({
               fontSize={10}
               fill={color('--muted')}
             >
-              {WEEKDAYS[r]}
+              {weekdayName(r)}
             </text>
           ))}
           {data.map((d, i) => {
@@ -72,7 +74,7 @@ export function CalendarHeatmap({
             const value = numeric(d, metric);
             if (d.date.getMonth() !== lastMonth && d.date.getDate() <= 7) {
               lastMonth = d.date.getMonth();
-              monthLabels.push({ x, text: MONTHS[lastMonth] });
+              monthLabels.push({ x, text: monthName(lastMonth) });
             }
             return (
               <rect

@@ -14,8 +14,12 @@ DayRecord[]                    una fila por día, con TODAS las derivadas
    ▼
 { days, previous }
    │  métricas del rango       src/lib/metrics.ts
+   │      └─ estimadores       src/lib/econ/*
    ▼
-vistas                         src/views/*.tsx
+vistas                         src/views/*.tsx  (una por pestaña, React.lazy)
+   │  textos                   src/lib/i18n/{es,en}.tsx
+   ▼
+pantalla
 ```
 
 La regla que sostiene todo: **las vistas no calculan**. Si una vista necesita un
@@ -23,7 +27,7 @@ número, ese número ya existe en `DayRecord` o sale de una función de
 `metrics.ts`. Eso hace que cada indicador tenga exactamente un lugar donde vive,
 un lugar donde se prueba y un lugar donde se corrige.
 
-## Las tres capas
+## Las cuatro capas
 
 ### `src/lib/whoop/` — todo lo que sabe de WHOOP
 
@@ -67,15 +71,95 @@ empieza por acá.
 `stats.ts` no sabe nada de WHOOP: medias, desviaciones, Pearson con p-valor por
 la distribución t, regresión lineal, t de Welch y ventanas móviles. Todo ignora
 nulos de forma pairwise-complete y devuelve `null` cuando no hay datos
-suficientes, en vez de inventar un número.
+suficientes, en vez de inventar un número. Exporta además la distribución t
+—`studentCdf`, `tTest` y `tQuantile` por bisección— porque es de donde salen los
+p-valores y los valores críticos de toda la capa `econ/`, y la convención de
+colas se decide una sola vez.
 
 `metrics.ts` sí sabe de WHOOP, pero solo a nivel de rango: la tabla de drivers de
 recuperación, el efecto de los hábitos, el resumen de actividades, los minutos
 por zona y la desviación por día de la semana.
 
-`format.ts` es el único lugar donde se decide cómo se ve un número. Locale
-`es-CO`, coma decimal, y helpers específicos (`hoursMinutes`, `clockTime`) para
-que no se repitan conversiones en las vistas.
+`format.ts` es el único lugar donde se decide cómo se ve un número. El locale es
+**mutable**: `setFormatLocale` lo cambia a `es-CO` o a `en-GB` y vacía los cachés
+de `Intl`. Los formateadores se llaman desde el render y leen el locale en el
+momento de la llamada, así que basta con que el conmutador de idioma mueva el
+locale **antes** de disparar el re-render, que es lo que hace `setLang` en el
+store. Un contexto de React habría obligado a pasar un hook por cada hoja que
+imprime un número, que son casi todas.
+
+Los nombres de mes y de día salen de `Intl` y no de un arreglo, pero las etiquetas
+se **componen** (`11 sept`, `jue 10 sept 26`) en vez de pedirle el patrón entero a
+`Intl.DateTimeFormat`: los patrones de locale son frases —`es-CO` devuelve
+«11 de sept» y le mete una coma al día de la semana— y estas etiquetas van debajo
+de un eje cada pocos píxeles. También se le quita el punto final a la
+abreviatura, que el español pone y el inglés no. Lo único que asume la composición
+es que el día va antes del mes, cierto en los dos idiomas que habla la app.
+
+Los helpers específicos (`hoursMinutes`, `clockTime`) siguen ahí para que no se
+repitan conversiones en las vistas.
+
+### `src/lib/econ/` — el motor econométrico
+
+La capa que estima. `stats.ts` responde preguntas de una o dos variables;
+`econ/` responde las que necesitan un modelo, y cada estimador vive en su propio
+módulo con sus propias pruebas:
+
+| módulo            | qué estima                                                    |
+| ----------------- | ------------------------------------------------------------- |
+| `ols.ts`          | mínimos cuadrados multivariados por QR, con errores HC1 o HAC |
+| `lag.ts`          | rezagos distribuidos y el multiplicador acumulado             |
+| `delta.ts`        | combinaciones lineales y razones de coeficientes por delta    |
+| `multiplicity.ts` | q-valores de Benjamini–Hochberg                               |
+| `smooth.ts`       | binscatter y LOESS de grado 1                                 |
+| `breaks.ts`       | CUSUM tabular y puntos de cambio por segmentación binaria     |
+| `spectral.ts`     | periodograma de Lomb–Scargle con nivel de falsa alarma        |
+
+Las fórmulas y los supuestos de cada uno están en
+[metricas.md §6](metricas.md#6-métodos-econométricos). Acá van las decisiones de
+diseño que no son estadística sino arquitectura:
+
+- **`econ/` no sabe de WHOOP.** Recibe arreglos de números y nombres de columna.
+  Quien traduce `DayRecord` a una matriz de diseño es `metrics.ts`, igual que
+  hoy traduce a los argumentos de `pearson`. Un estimador que conociera
+  `recoveryNext` sería imposible de probar contra un caso con respuesta
+  conocida, que es exactamente lo que estos módulos tienen que permitir.
+- **Sin dependencias.** QR de Householder con pivoteo, la beta incompleta que ya
+  estaba en `stats.ts` y trigonometría. Nada de esto pesa lo que pesaría una
+  librería de álgebra lineal.
+- **Un estimador nunca devuelve un número frágil.** El tipo de retorno es
+  `Resultado | Insufficient`, donde `Insufficient` lleva `{ n, minN, missing }`.
+  Eso es lo que permite la regla del proyecto: por debajo del n mínimo el panel
+  se apaga con «faltan 14 días» en vez de dibujar una estimación que se ve igual
+  de convincente con doce observaciones que con doscientas. Un `null` no
+  alcanzaría, porque no sabe cuántas faltan.
+- **El intervalo viaja con el coeficiente.** El tipo `Estimate` es
+  `{ coef, se, t, p, ciLow, ciHigh }` y no hay forma de obtener un coeficiente
+  sin su intervalo. Es una restricción de tipos a propósito: lo que es fácil de
+  omitir se omite.
+- **`vcov` es obligatorio en `ols`, por la misma razón.** Elegir el estimador de
+  varianza equivocado no falla: devuelve intervalos del ancho equivocado, que se
+  dibujan igual de convincentes. Poner un valor por omisión sería elegir por
+  quien llama y no decírselo, así que el tipo obliga a escribir `hc1` o `hac`.
+  `distributedLag` sí tiene un default —`hac`— porque a diferencia de `ols` sabe
+  exactamente qué diseño está estimando; está argumentado en metricas.md §6.2.
+- **Los p-valores que salen de acá están sin corregir**, y eso está documentado
+  en el tipo. Cualquier vista que muestre más de una prueba a la vez tiene que
+  pasarlas por `benjaminiHochberg` y marcar por q.
+
+Las pruebas están en `src/test/econ.*.test.ts` y todas siguen el mismo patrón:
+generar datos con la respuesta metida a mano —coeficientes conocidos, un salto
+en una posición conocida, una sinusoide de periodo conocido— y exigir que el
+estimador la recupere. El ruido sale de `src/test/random.ts`, un generador
+congruencial con semilla, porque una prueba numérica que falla una vez de cada
+veinte enseña a ignorarla. Donde la afirmación es estadística y no exacta, se
+compara contra el propio error estándar del estimador y no contra una tolerancia
+inventada: una cota más angosta que una desviación estándar solo estaría
+probando la semilla.
+
+Esta es la parte del proyecto que no se puede romper en silencio. Un error de
+parseo se ve; un error en la matriz de covarianzas produce intervalos que se
+dibujan perfectos y son mentira.
 
 ### `src/charts/` — píxeles
 
@@ -95,6 +179,102 @@ Dos detalles que hay que respetar:
 
 El eje X es categórico, no temporal: los días se reparten en bandas iguales. Un
 hueco en el export se lee como hueco, no estira las barras vecinas.
+
+Las tres gráficas de estimación siguen las mismas reglas y agregan una propia:
+**el intervalo se dibuja siempre**, y la forma del punto dice si el efecto se
+separó de cero.
+
+- `CoefficientPlot` — forest plot horizontal, ordenado por magnitud, con línea
+  en cero. El punto va lleno y con asterisco solo cuando el **q** de
+  Benjamini–Hochberg pasa el umbral; marcar por p en una gráfica que es una
+  familia de pruebas por construcción garantizaría una estrella sobre ruido.
+- `IrfChart` — coeficiente por rezago con banda sombreada al 95%. La banda es
+  una sola forma continua y no barras sueltas: lo que se lee es la _forma_ de la
+  respuesta —cuándo llega, qué tan rápido decae— y una fila de barras invita a
+  leer cada rezago como un hallazgo propio.
+- `BinScatterChart` — nube cruda en baja opacidad, medias por bin con su
+  intervalo, y curva LOESS encima. Calcula sus propios bins y su propia curva a
+  partir de los puntos, igual que `ScatterChart` ajusta su propia recta: son
+  lecturas de los mismos datos, no métricas nuevas, así que no le deben nada a
+  `metrics.ts`.
+- `SpectrumChart` — periodograma con eje x logarítmico en el periodo y la línea
+  de falsa alarma. El eje es logarítmico porque ahí la resolución del estimador
+  es aproximadamente uniforme; en lineal, todo ciclo más corto que una quincena
+  queda aplastado en el primer centímetro, que es justo la zona que importa para
+  un hábito diario.
+
+`TimeSeriesChart` acepta además `markers`: anotaciones fechadas que se dibujan
+**sobre la serie que anotan** y no en un panel aparte, porque una fecha solo
+significa algo al lado de la línea que interrumpe. `break` es una raya vertical
+para un cambio de régimen; `high` y `low` son banderines para una señal de carta
+de control.
+
+`useResolvedColor` invalida su caché por dos vías, y hacen falta las dos: el
+`change` de `matchMedia('(prefers-color-scheme: dark)')` para el esquema del
+sistema, y un `MutationObserver` sobre el atributo `data-theme` del elemento raíz
+para una elección explícita. Con solo la primera —como estuvo hasta ahora— las
+gráficas ya montadas seguían pintando con la paleta anterior hasta que algo las
+remontara. `tokens.css` ya declara las tres variantes (claro, oscuro del sistema,
+oscuro explícito), así que un conmutador de tema en el encabezado no necesita nada
+más que escribir el atributo.
+
+### `src/lib/i18n/` — los dos idiomas
+
+Un objeto por idioma y un hook. Sin librería: `es.tsx` es la fuente de verdad de
+la **forma** del catálogo y `en.tsx` está anotado con `Messages = typeof es`, así
+que una clave agregada de un lado y olvidada del otro no es una cadena en español
+colándose en una página en inglés, es un error de `npm run typecheck`.
+
+Los valores que interpolan son funciones y no plantillas con `{count}`, porque un
+marcador dentro de una cadena no puede llevar un `<b>` y la mitad de estos
+subtítulos lo necesitan. Una función se ensancha a su firma y no a un literal, que
+es justo la verificación que queremos sacarle a `typeof`. Por eso los catálogos son
+`.tsx`.
+
+`core.ts` está separado a propósito —detección, persistencia y el tipo `Lang`, sin
+React y sin el store— para que `state/store.ts` lo pueda importar sin un ciclo;
+`index.ts` es el que trae `useMessages`, y ese sí importa el store.
+
+Reglas del flujo:
+
+- **`econ/` y `metrics.ts` no escriben prosa.** Donde antes había una etiqueta hay
+  un id (`DriverId`, `ElasticityId`) y donde había un motivo en español hay un
+  código (`RatioProblem`). La capa que estima no puede tener idioma; si lo tuviera,
+  agregar el segundo obligaría a tocarla.
+- **Las gráficas traducen lo suyo.** Los estados vacíos, los tooltips y las
+  leyendas viven en `messages.charts` y los componentes llaman a `useMessages()`
+  ellos mismos, porque la misma gráfica dice lo mismo donde sea que se monte. Las
+  props de texto siguen existiendo para sobreescribir un caso puntual.
+- **Español es el default.** `navigator.language` solo concede inglés cuando lo
+  pide; una elección manual gana y sobrevive al recargar, en `localStorage`.
+
+### El mapa de chunks
+
+Cada pestaña es un `React.lazy` con su propio chunk, y `<Suspense>` muestra
+`ViewSkeleton`, que dibuja cajas con la altura de los paneles reales de esa
+pestaña. Un spinner sobre una página vacía colapsaría el documento a la altura del
+encabezado y empujaría el pie de página un instante después, que se lee como que
+el layout se rompió y no como que el contenido está llegando.
+
+| chunk             | gzip       | cuándo se descarga                           |
+| ----------------- | ---------- | -------------------------------------------- |
+| `index` + CSS     | 82 kB      | siempre (React son 61 de esos)               |
+| `parse`           | 40 kB      | al soltar un archivo, nunca antes            |
+| `metrics`         | 15 kB      | con la primera pestaña (metrics + econ + d3) |
+| `TimeSeriesChart` | 3,6 kB     | compartido por cuatro pestañas               |
+| una vista         | 0,8–3,4 kB | al abrir su pestaña                          |
+| `demo`            | 1,7 kB     | con `?demo=1` o el botón de la demo          |
+
+Lo que hay que cuidar al tocar esto:
+
+- **No importes `@/views` como barril.** Se borró justamente por eso: un import del
+  barril vuelve a meter las seis vistas en quien lo importe y deshace la partición.
+- **`ImportView` importa `@/lib/whoop/parse` de forma dinámica.** JSZip y PapaParse
+  son 40 kB gzip y no hacen falta hasta que cae un archivo; para entonces la
+  pantalla ya dice «Leyendo…».
+- **Los dos catálogos viajan en el chunk de entrada** (16 kB gzip entre los dos).
+  Es el precio de que `useMessages()` sea síncrono, y con el presupuesto en 130 kB
+  sobra margen para pagarlo.
 
 ### `src/views/` y `src/components/`
 
