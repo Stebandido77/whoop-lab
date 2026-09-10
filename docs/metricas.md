@@ -618,3 +618,187 @@ del rango observado: un solo ciclo no es evidencia de un ciclo.
 **Supuesto.** Solo se le quita la media. Una serie con tendencia filtra potencia
 hacia los periodos largos, así que hay que quitarle la tendencia antes de
 preguntarle qué ciclos tiene tu HRV.
+
+### 6.10 Densidad, modas y huecos en el soporte — `kernelDensity`, `silvermanModality`, `supportGaps`
+
+Tres cosas que responden a la misma pregunta: **qué forma tiene la variable del
+eje x**, antes de dibujar nada encima de ella.
+
+#### Densidad kernel
+
+Estimador gaussiano sobre una grilla, con el ancho de banda de Silverman
+`0,9 · min(sd, IQR/1,34) · n^(−1/5)` por omisión. El `min` con el rango
+intercuartílico escalado protege contra colas pesadas, **no** contra
+bimodalidad: en una mezcla de dos jorobas bien separadas los cuartiles caen a
+lado y lado del hueco, de modo que IQR/1,34 sale más grande que la desviación
+estándar y manda la desviación estándar, que ya viene inflada por la separación.
+Por eso la afirmación de bimodalidad no sale de contar jorobas a este ancho.
+
+La grilla se extiende tres anchos de banda más allá del dato extremo. Cortarla
+en el mínimo y el máximo observados dejaría un escalón ahí, y un escalón es un
+máximo local para cualquier cosa que cuente máximos locales.
+
+Se calcula por binning lineal y convolución y no evaluando el kernel contra cada
+observación: el bootstrap de abajo estima unas cuantas centenas de densidades y
+la vía directa serían decenas de millones de `exp`.
+
+#### Prueba de ancho de banda crítico de Silverman
+
+**Contar jorobas en una densidad kernel no es un hallazgo, es una elección de
+ancho de banda**: agrándalo lo suficiente y todo tiene una moda, achícalo lo
+suficiente y todo tiene cien. Esta prueba le quita la elección a quien mira.
+
+Para el kernel gaussiano el número de modas es monótono no creciente en el ancho
+de banda, así que existe un único **ancho de banda crítico** h₁: el más pequeño
+con el que la segunda moda todavía sobrevive. Un h₁ grande dice que los datos
+insisten en dos jorobas incluso bajo mucho suavizado. La monotonía es lo que
+vuelve legítima la bisección con la que se le busca.
+
+«Grande comparado con qué» lo contesta el bootstrap. Bajo la nula la muestra
+viene de la densidad unimodal estimada en h₁, así que se remuestrea de ella:
+
+```
+y = x̄ + (x* − x̄ + h₁·ε) / √(1 + h₁²/σ²) ,   ε ~ N(0,1)
+```
+
+El reescalamiento mantiene la varianza del bootstrap igual a la de la muestra;
+sin él, el ruido del kernel infla la dispersión y la prueba pierde casi toda su
+potencia. El p-valor es la fracción de réplicas que necesitan un ancho de banda
+al menos tan grande, **con suavizado de más uno**: 200 sorteos no pueden
+establecer un cero, así que se reporta `(excesos + 1)/(réplicas + 1)` y el piso
+del panel es «p < 0,001», nunca «p = 0».
+
+El bootstrap se siembra con un hash de la propia muestra. Un panel cuyo p-valor
+cambia en cada repintado es un panel que nadie puede citar, y una captura de
+pantalla de uno es la captura de un número que ya no existe.
+
+**Qué afirma y qué no.** Afirma que la distribución tiene más de una joroba. No
+afirma que las jorobas sean «días de descanso» y «días de entreno»: eso es una
+lectura de los datos, no un resultado. El panel nombra las dos modas porque son
+descriptivas y deja la interpretación escrita como interpretación.
+
+**Supuesto y límite.** La prueba tiene poca potencia con muestras cortas o
+jorobas cercanas: no rechazar no es evidencia de unimodalidad. Y controla el
+error de tipo I para la hipótesis «una moda» de forma aproximada —es un
+bootstrap, no una distribución exacta—, con la conocida tendencia de la prueba de
+Silverman a ser conservadora.
+
+#### Huecos en el soporte
+
+Un `supportGaps` recorre la variable ordenada y reporta cada intervalo entre dos
+observaciones consecutivas que abarca más de una fracción del rango observado
+(una décima por omisión).
+
+Existe por lo que le hace a todo lo demás. **Una pendiente ajustada a través de
+una banda vacía no describe una relación en esa banda: une dos grupos.** Toda
+forma funcional que pase por las dos medias de grupo ajusta exactamente igual de
+bien ahí, y los datos no pueden elegir entre ellas. Si además el hueco es grande,
+el coeficiente está identificado casi solamente por la distancia entre los dos
+grupos —es una comparación de dos puntos disfrazada de pendiente—. Que eso siga
+siendo útil depende de la pregunta; que haya que decirlo, no.
+
+Los paneles de dosis y respuesta y el explorador de modelos escriben la
+advertencia con los dos extremos del hueco y su tamaño relativo, en vez de dejar
+que la banda vacía se lea como un defecto de la gráfica.
+
+---
+
+## 7. El explorador de modelos
+
+### 7.1 Qué es — implementado
+
+Un constructor de especificaciones. La persona elige variable dependiente,
+regresores y controles de un catálogo tipado de campos de `DayRecord`, con un
+rezago de 0 a 7 días por término, y opcionalmente efectos fijos de día de la
+semana y de mes. Se ajusta por `ols` con `vcov: 'hac'` y `times`, y se reporta la
+tabla de coeficientes con intervalos, el R² ajustado, n, y el binscatter del
+primer regresor contra la dependiente.
+
+**Siempre HAC, sin interruptor.** Todo lo que se puede construir acá es una serie
+diaria contra otra serie diaria, que es el diseño de §6.2; la única razón para
+querer HC1 sería que el intervalo saliera más angosto.
+
+#### Qué no está en el catálogo, y por qué
+
+- **Las medias móviles** (`recovery7`, `hrv28`, `strain7`…). Regresar una serie
+  contra su propia media móvil es una identidad mecánica: el lado izquierdo está
+  dentro del derecho y el ajuste está garantizado. No es un hallazgo, es
+  aritmética.
+- **`recoveryNext` y `strainPrev`.** El selector de rezago ya los expresa, y
+  ofrecer las dos formas invita a meter la misma variable dos veces en un mismo
+  diseño, que es exactamente colinealidad.
+- **La dependiente al rezago cero**, que sería y contra y. Al rezago 1 o más sí
+  se permite: ese es un término autorregresivo legítimo y, como advierte §6.2, a
+  menudo el que falta.
+
+#### El umbral de n por parámetro
+
+El explorador se apaga —devuelve `Insufficient`, no un ajuste frágil— por debajo
+de **12 observaciones por parámetro**, con piso absoluto de **40 observaciones**.
+El mínimo se calcula sobre los parámetros que pide el diseño y no sobre los que
+sobreviven a QR: contarlos después dejaría comprar espacio muestral agregando una
+columna colineal.
+
+El número está medido, no supuesto. Cobertura empírica de un intervalo HAC
+nominal al 95% sobre un diseño de regresores persistentes (AR 0,8) con errores
+AR(0,5), 1000 réplicas por celda:
+
+| n/k | k = 5 | k = 10 |
+| --- | ----: | -----: |
+| 4   | 80,4% |  83,2% |
+| 6   | 80,2% |  83,6% |
+| 8   | 82,7% |  86,5% |
+| 12  | 86,1% |  84,9% |
+| 20  | 89,4% |  89,0% |
+| 30  | 86,4% |  89,5% |
+
+HAC nunca llega al 95% en un diseño así —§6.1 documenta el techo alrededor del
+88–89%—, de modo que la pregunta no es dónde se vuelve correcto sino dónde deja
+de empeorar. Eso ocurre alrededor de una docena de observaciones por parámetro:
+por debajo, una banda «al 95%» acierta una de cada cinco veces menos de lo que
+dice; por encima, otras ocho observaciones por parámetro compran tres puntos.
+
+El piso de 40 es aparte: por debajo de eso la regla de Newey–West da un
+truncamiento de tres rezagos y Ω̂ se arma con un puñado de pares de residuos, así
+que el sándwich mismo apenas está estimado.
+
+### 7.2 La familia acumulada — implementado
+
+**Este es el punto de la pestaña, no un detalle de presentación.**
+
+Un explorador libre de especificaciones es una máquina de p-hacking. Con 59 días
+y treinta campos en el catálogo hay cientos de pares que probar, y a p < 0,05
+algo sale significativo por construcción: probar veinte pares nulos y quedarse
+con el que brilló no es investigación, es escoger el máximo de veinte sorteos.
+Corregir dentro de cada modelo no arregla nada, porque la búsqueda no ocurre
+dentro de un modelo: ocurre entre modelos.
+
+Por eso el explorador lleva la cuenta de **cada regresor probado en la sesión** y
+aplica Benjamini–Hochberg (§6.3) sobre esa familia acumulada. Consecuencias, y
+todas son deliberadas:
+
+- **Los q de un modelo empeoran cuando se corre otro.** Un coeficiente que salía
+  marcado en la tercera especificación puede dejar de estarlo en la vigésima. Así
+  tiene que ser: la evidencia sobre ese coeficiente no cambió, pero la cantidad de
+  búsqueda que hay detrás de él sí.
+- **Los controles no entran en la familia.** Un control es lo que se está dejando
+  fijo, no una hipótesis; nadie está buscando entre ellos. Solo los regresores
+  cuentan.
+- **Volver a correr la misma especificación no agranda la familia.** Se
+  identifica por una clave canónica —dependiente, regresores, controles y efectos
+  fijos, con el orden normalizado—, así que regresar a un modelo anterior no
+  cuenta como una búsqueda nueva.
+- **El contador se muestra siempre**, con el número de especificaciones y el de
+  coeficientes en la familia. Un usuario que ve «31 especificaciones» sabe leer su
+  propio q.
+- **Se reinicia al recargar la página.** Es una limitación asumida: el número es
+  un **piso** de cuánto se ha buscado, nunca un techo. Persistirlo entre sesiones
+  sería más honesto y también volvería el tablero inusable a la semana; se
+  documenta el sesgo en vez de esconderlo.
+
+**Lo que esto no arregla.** BH controla la tasa de falsos descubrimientos de la
+familia que se le declara. No sabe de las especificaciones que alguien probó,
+miró y descartó antes de que el contador existiera, ni de las decisiones tomadas
+mirando los datos —qué rango seleccionar, qué controles parecían razonables— que
+son grados de libertad igual de reales. La corrección hace el problema visible y
+lo acota; no lo elimina.

@@ -28,7 +28,10 @@ de valor del proyecto.
    `buildDayRecords` (`src/lib/whoop/model.ts`) y se guarda en `DayRecord`. Si
    una vista necesita algo nuevo, el campo se agrega al tipo y al modelo, no se
    calcula en el JSX. Los agregados que dependen del rango seleccionado
-   (correlaciones, efectos, resúmenes) van en `src/lib/metrics.ts`.
+   (correlaciones, efectos, resúmenes) van en `src/lib/metrics.ts`. La única
+   excepción es el explorador de modelos, que vive en `src/lib/explorer.ts` con
+   su catálogo de campos en `src/lib/fields.ts` porque es un subsistema y no un
+   indicador; la regla de que la vista no calcula sigue igual.
 2. **Un color, un lugar.** Todos los colores son custom properties definidas en
    `src/styles/tokens.css`. Los componentes de gráfica reciben el nombre del
    token (`'--hi'`, `'--strain'`) y lo resuelven con `useResolvedColor`. Nunca

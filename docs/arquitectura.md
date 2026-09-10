@@ -14,6 +14,7 @@ DayRecord[]                    una fila por día, con TODAS las derivadas
    ▼
 { days, previous }
    │  métricas del rango       src/lib/metrics.ts
+   │  o una especificación     src/lib/explorer.ts + src/lib/fields.ts
    │      └─ estimadores       src/lib/econ/*
    ▼
 vistas                         src/views/*.tsx  (una por pestaña, React.lazy)
@@ -78,7 +79,23 @@ colas se decide una sola vez.
 
 `metrics.ts` sí sabe de WHOOP, pero solo a nivel de rango: la tabla de drivers de
 recuperación, el efecto de los hábitos, el resumen de actividades, los minutos
-por zona y la desviación por día de la semana.
+por zona, la desviación por día de la semana y la distribución del strain.
+
+`fields.ts` y `explorer.ts` son la excepción a la regla de que los agregados de
+rango viven en `metrics.ts`, y es deliberada. El explorador de modelos no es un
+indicador: es un subsistema con su propio catálogo tipado de columnas, su propia
+gramática de especificaciones, su propia persistencia y su propia contabilidad de
+multiplicidad. Meterlo en `metrics.ts` habría llevado ese archivo a novecientas
+líneas sin que nada de eso fuera reutilizable desde fuera de una pestaña. La
+regla que sigue en pie, y es la que importa, es que **la vista no calcula**:
+`ModelsView` arma una `Specification` y llama a `runSpecification`.
+
+`fields.ts` define qué columnas de `DayRecord` puede tocar el explorador, con su
+escala de presentación. Es una lista curada y no `keyof DayRecord`: las medias
+móviles quedan fuera porque regresar una serie contra su propia media móvil es
+una identidad mecánica, y `recoveryNext`/`strainPrev` quedan fuera porque el
+selector de rezago ya los expresa. El razonamiento completo está en
+[metricas.md §7.1](metricas.md#71-qué-es--implementado).
 
 `format.ts` es el único lugar donde se decide cómo se ve un número. El locale es
 **mutable**: `setFormatLocale` lo cambia a `es-CO` o a `en-GB` y vacía los cachés
@@ -114,6 +131,7 @@ módulo con sus propias pruebas:
 | `smooth.ts`       | binscatter y LOESS de grado 1                                 |
 | `breaks.ts`       | CUSUM tabular y puntos de cambio por segmentación binaria     |
 | `spectral.ts`     | periodograma de Lomb–Scargle con nivel de falsa alarma        |
+| `density.ts`      | histograma, densidad kernel, prueba de modalidad y huecos     |
 
 Las fórmulas y los supuestos de cada uno están en
 [metricas.md §6](metricas.md#6-métodos-econométricos). Acá van las decisiones de
@@ -197,6 +215,12 @@ separó de cero.
   partir de los puntos, igual que `ScatterChart` ajusta su propia recta: son
   lecturas de los mismos datos, no métricas nuevas, así que no le deben nada a
   `metrics.ts`.
+- `HistogramChart` — barras y densidad kernel sobre el mismo eje, con las modas
+  marcadas y la antimoda como raya vertical. Las dos capas y no una: las barras
+  son honestas sobre dónde están las observaciones pero su forma se mueve con los
+  bordes de los grupos, y la curva es suave pero su forma es una elección de
+  ancho de banda. Las barras se dibujan como densidad y no como conteo para que
+  la curva pueda compartirles el eje sin una segunda escala que malinterpretar.
 - `SpectrumChart` — periodograma con eje x logarítmico en el periodo y la línea
   de falsa alarma. El eje es logarítmico porque ahí la resolución del estimador
   es aproximadamente uniforme; en lineal, todo ciclo más corto que una quincena

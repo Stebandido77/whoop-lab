@@ -6,3 +6,4 @@ export * from './multiplicity';
 export * from './smooth';
 export * from './breaks';
 export * from './spectral';
+export * from './density';
