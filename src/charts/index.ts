@@ -9,3 +9,4 @@ export * from './CoefficientPlot';
 export * from './IrfChart';
 export * from './BinScatterChart';
 export * from './SpectrumChart';
+export * from './HistogramChart';

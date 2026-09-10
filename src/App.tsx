@@ -28,6 +28,7 @@ const VIEWS: Record<TabId, React.LazyExoticComponent<React.ComponentType<ViewPro
   sleep: lazy(() => import('@/views/SleepView').then((m) => ({ default: m.SleepView }))),
   training: lazy(() => import('@/views/TrainingView').then((m) => ({ default: m.TrainingView }))),
   habits: lazy(() => import('@/views/HabitsView').then((m) => ({ default: m.HabitsView }))),
+  models: lazy(() => import('@/views/ModelsView').then((m) => ({ default: m.ModelsView }))),
   data: lazy(() => import('@/views/DataView').then((m) => ({ default: m.DataView }))),
 };
 

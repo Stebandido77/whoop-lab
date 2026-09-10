@@ -39,15 +39,26 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
     <div className="grid">
       <Panel span={12} title={m.sleep.doseTitle} subtitle={m.sleep.doseSubtitle}>
         {dose.ok ? (
-          <BinScatterChart
-            points={dose.points}
-            xLabel={m.sleep.doseX}
-            yLabel={m.sleep.doseY}
-            formatY={pct}
-            formatX={f1}
-            color="--sleep"
-            height={300}
-          />
+          <>
+            <BinScatterChart
+              points={dose.points}
+              xLabel={m.sleep.doseX}
+              yLabel={m.sleep.doseY}
+              formatY={pct}
+              formatX={f1}
+              color="--sleep"
+              height={300}
+            />
+            {dose.gaps.widest && (
+              <p className="callout" style={{ margin: '12px 0 0' }}>
+                {m.common.supportGap(
+                  f1(dose.gaps.widest.from),
+                  f1(dose.gaps.widest.to),
+                  f0(dose.gaps.widest.share * 100),
+                )}
+              </p>
+            )}
+          </>
         ) : (
           <NotEnough state={dose} what={m.sleep.doseWhat} />
         )}

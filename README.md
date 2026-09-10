@@ -43,6 +43,20 @@ them do:
   and `entrenamientos.csv` with every header translated. The parser matches
   accent-folded substrings of the header rather than exact names, so both come in
   without renaming anything.
+- **A model explorer that counts how much you searched.** Build any regression
+  out of the day record — dependent, regressors, controls, a lag per term — and it
+  runs through the same HAC engine as everything else. The part no other tool has:
+  it keeps the running family of every regressor you have tested this session and
+  Benjamini–Hochberg corrects across all of them, so the q of your third model gets
+  worse when you run your twentieth. Without that, a free-form explorer is a
+  p-hacking machine — try enough pairs and something is significant by
+  construction.
+- **It tells you when the x axis has a hole in it.** Daily strain is usually
+  bimodal — rest days in one hump, training days in another — and a Silverman
+  critical-bandwidth test says so rather than leaving you to count humps at a
+  bandwidth of your choosing. Wherever a chart's x support has an empty band, the
+  panel says that the slope across it is joining two groups, not describing a
+  relationship.
 - **An interface in English and Spanish**, detected from your browser and
   switchable in the header. Number formats follow the language, so a decimal comma
   never turns up in an English page.
@@ -55,12 +69,14 @@ into Excel, R or Stata.
 Everything below is real synthetic data from the demo — 420 days generated in your
 browser with real relationships baked in.
 
-|                                                                |                                                       |
-| -------------------------------------------------------------- | ----------------------------------------------------- |
-| ![Habit effects, adjusted and unadjusted](docs/img/habits.png) | ![Strain impulse response](docs/img/training.png)     |
-| **Habits.** The same questions estimated two ways.             | **Training.** How long a hard session actually lasts. |
-| ![Sleep dose and response](docs/img/sleep.png)                 | ![Overview in dark mode](docs/img/overview-dark.png)  |
-| **Sleep.** Where extra hours stop buying recovery.             | **Dark mode**, following your system or your choice.  |
+|                                                                |                                                            |
+| -------------------------------------------------------------- | ---------------------------------------------------------- |
+| ![Habit effects, adjusted and unadjusted](docs/img/habits.png) | ![Strain impulse response](docs/img/training.png)          |
+| **Habits.** The same questions estimated two ways.             | **Training.** How long a hard session actually lasts.      |
+| ![Sleep dose and response](docs/img/sleep.png)                 | ![Overview in dark mode](docs/img/overview-dark.png)       |
+| **Sleep.** Where extra hours stop buying recovery.             | **Dark mode**, following your system or your choice.       |
+| ![Model explorer](docs/img/models.png)                         | ![Strain distribution](docs/img/training-distribution.png) |
+| **Models.** Any regression you like, with the search counted.  | **Distribution.** Two modes, named and tested.             |
 
 ## Privacy
 
@@ -136,17 +152,17 @@ committed, and `src/test/fixture.test.ts` runs the whole pipeline over them.
 
 ## Stack and why
 
-| Choice                                           | Reason                                                                                                                                              |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| React 19 + TypeScript (strict) + Vite            | Boring, fast, and the type system is doing real work in `src/lib/whoop/types.ts`                                                                    |
-| Hand-written econometrics in `src/lib/econ/`     | QR least squares, HAC and HC1 covariance, distributed lags, LOESS, Lomb–Scargle. No dependency does this in a form small enough to justify shipping |
-| Hand-built SVG charts on `d3-scale` / `d3-shape` | A charting library would have to be fought to keep this look. d3 supplies the maths; the components own the pixels                                  |
-| Plain CSS with custom properties                 | The whole palette lives in `src/styles/tokens.css`. Charts resolve colours from the same tokens, so light and dark stay in sync with no duplication |
-| Two typed message objects, no i18n library       | `Messages` is `typeof es`, so a key added in one language and missed in the other fails `npm run typecheck` rather than shipping                    |
-| Zustand                                          | One small store, no ceremony                                                                                                                        |
-| IndexedDB via `idb-keyval`                       | A multi-year journal is well past the localStorage budget                                                                                           |
+| Choice                                           | Reason                                                                                                                                                                         |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| React 19 + TypeScript (strict) + Vite            | Boring, fast, and the type system is doing real work in `src/lib/whoop/types.ts`                                                                                               |
+| Hand-written econometrics in `src/lib/econ/`     | QR least squares, HAC and HC1 covariance, distributed lags, LOESS, Lomb–Scargle, Silverman's modality test. No dependency does this in a form small enough to justify shipping |
+| Hand-built SVG charts on `d3-scale` / `d3-shape` | A charting library would have to be fought to keep this look. d3 supplies the maths; the components own the pixels                                                             |
+| Plain CSS with custom properties                 | The whole palette lives in `src/styles/tokens.css`. Charts resolve colours from the same tokens, so light and dark stay in sync with no duplication                            |
+| Two typed message objects, no i18n library       | `Messages` is `typeof es`, so a key added in one language and missed in the other fails `npm run typecheck` rather than shipping                                               |
+| Zustand                                          | One small store, no ceremony                                                                                                                                                   |
+| IndexedDB via `idb-keyval`                       | A multi-year journal is well past the localStorage budget                                                                                                                      |
 
-The initial download is **82 kB gzipped** (entry chunk plus CSS), of which React
+The initial download is **87 kB gzipped** (entry chunk plus CSS), of which React
 is 61 kB. Every tab is a separate lazy chunk, so a first visit pays for the import
 screen and nothing else, and the CSV parser — JSZip and PapaParse, 40 kB gzipped
 between them — loads only once a file is actually dropped. See
@@ -158,11 +174,15 @@ between them — loads only once a file is actually dropped. See
 src/
   lib/whoop/     column mapping, CSV parsing, the day-record model
   lib/econ/      OLS with HAC/HC1, distributed lags, delta method, BH,
-                 binscatter + LOESS, CUSUM + changepoints, Lomb–Scargle
+                 binscatter + LOESS, CUSUM + changepoints, Lomb–Scargle,
+                 kernel density + Silverman modality + support gaps
+  lib/explorer.ts, lib/fields.ts
+                 the model explorer: field catalogue, specification grammar,
+                 the accumulated multiple-testing family, saved presets
   lib/i18n/      the English and Spanish message catalogues, and the hook
   lib/           stats, formatting, derived metrics, demo data, storage
   charts/        TimeSeries, StackedBar, Scatter, BinScatter, Coefficient,
-                 Irf, Spectrum, HBar, CalendarHeatmap, Sparkline
+                 Irf, Spectrum, Histogram, HBar, CalendarHeatmap, Sparkline
   components/    Panel, KpiCard, Legend, Segmented, ImportView, ViewSkeleton
   views/         one file per tab, each its own lazy chunk
   state/         zustand store and the range/window selector

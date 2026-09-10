@@ -58,6 +58,7 @@ export const es = {
     sleep: 'Sueño',
     training: 'Entrenamiento',
     habits: 'Hábitos',
+    models: 'Modelos',
     data: 'Datos',
   },
 
@@ -73,6 +74,14 @@ export const es = {
     noPreviousPeriod: 'sin periodo previo',
     vsPreviousPeriod: 'vs. periodo anterior',
     noData: 'sin dato',
+    supportGap: (from: string, to: string, share: string): ReactNode => (
+      <>
+        <b>Ojo con el hueco:</b> entre {from} y {to} no hay ni una observación, y eso es el {share}%
+        del rango. Con la nube partida en dos, la pendiente que se dibuja ahí no describe una
+        relación: une dos grupos. Cualquier forma que pase por las dos medias ajusta igual de bien,
+        y los datos no pueden elegir entre ellas.
+      </>
+    ),
     days: (n: number): string => (n === 1 ? 'día' : 'días'),
   },
 
@@ -109,6 +118,7 @@ export const es = {
     standardError: 'Error estándar',
     ci95: (low: string, high: string) => `IC 95% ${low} a ${high}`,
     n: (n: string) => `n = ${n}`,
+    days: (n: string) => `${n} días`,
     range: (low: string, high: string) => `${low} a ${high}`,
     binMean: (perBin: string) => `Media por grupo de ${perBin} días, con IC 95%`,
     loess: (percent: string) => `LOESS, ventana del ${percent}%`,
@@ -165,6 +175,7 @@ export const es = {
     scatterTitle: '¿Cuánto te cuesta el strain al día siguiente?',
     scatterSubtitle:
       'Cada punto es un día: strain acumulado frente a la recuperación de la mañana siguiente.',
+    scatterWhat: 'la curva de strain contra recuperación',
     scatterX: 'Strain del día',
     scatterY: 'Recuperación al día siguiente',
     correlation: (r: string, n: string): ReactNode => (
@@ -398,6 +409,40 @@ export const es = {
     lastLagBites: (lag: number, days: string) => `El golpe todavía se nota ${lag} ${days} después.`,
     irfFooter: (n: string, bandwidth: string, r2: string) =>
       `${n} días · banda de Bartlett de ${bandwidth} días · R² ${r2}`,
+    distributionTitle: 'Cómo se reparten tus días de strain',
+    distributionSubtitle: (
+      <>
+        Histograma de strain diario con su densidad kernel encima. Las dos lecturas fallan en
+        direcciones opuestas —las barras son honestas sobre dónde están los días pero su forma se
+        mueve con los bordes de los grupos; la curva es suave pero su forma es una elección de ancho
+        de banda— así que lo que sobrevive a las dos vale la pena nombrarlo. La prueba de abajo no
+        cuenta jorobas a un ancho de banda elegido: busca el ancho más grande que todavía deja dos,
+        y pregunta por bootstrap si una muestra realmente de una sola joroba necesitaría uno así.
+      </>
+    ),
+    distributionWhat: 'la distribución del strain',
+    distributionAxis: 'Strain del día',
+    bimodal: (low: string, high: string, p: string, separation: string): ReactNode => (
+      <>
+        <b>
+          Tu strain diario tiene dos modas, no una: alrededor de {low} y de {high}.
+        </b>{' '}
+        La prueba de ancho de banda crítico de Silverman rechaza la unimodalidad con p {p}, y el
+        valle entre las dos baja al {separation}% por debajo de la más baja de ellas. Eso es
+        entrenar o descansar, con poco en medio — y es la razón de que cualquier dispersión con el
+        strain en el eje x salga partida en dos nubes.
+      </>
+    ),
+    unimodal: (p: string): ReactNode => (
+      <>
+        <b>Una sola moda.</b> La prueba de Silverman no rechaza la unimodalidad (p {p}): tus días de
+        strain forman un solo grupo con cola, no dos regímenes separados.
+      </>
+    ),
+    modalityShort: (modes: number, p: string) =>
+      `${modes} ${modes === 1 ? 'moda' : 'modas'} al ancho de banda dibujado · p ${p} contra unimodalidad`,
+    modalityBandwidth: (drawn: string, critical: string) =>
+      `ancho de banda ${drawn}, crítico ${critical}`,
     doseTitle: 'Dosis y respuesta: strain de hoy contra recuperación de mañana',
     doseSubtitle: (
       <>
@@ -430,6 +475,136 @@ export const es = {
     volumeTitle: 'Volumen semanal',
     volumeSubtitle: 'Minutos de actividad acumulados por semana.',
     volumeSeries: 'Minutos',
+  },
+
+  models: {
+    title: 'Explorador de modelos',
+    subtitle: (
+      <>
+        Arma una regresión y córrela por el mismo motor que el resto del tablero: mínimos cuadrados
+        con errores HAC, porque todo lo que se puede construir acá es una serie diaria contra otra.
+        No hay interruptor para cambiar el estimador de varianza — la única razón para querer HC1
+        acá sería que el intervalo saliera más angosto.
+      </>
+    ),
+    builderTitle: 'Especificación',
+    dependent: 'Variable dependiente',
+    regressors: 'Regresores',
+    regressorsHint:
+      'Lo que estás preguntando. Estos son los coeficientes que cuentan en la familia.',
+    controls: 'Controles',
+    controlsHint:
+      'Lo que estás dejando fijo. Son ajuste, no hipótesis, así que no entran en la corrección.',
+    add: 'Agregar',
+    remove: 'Quitar',
+    lagSameDay: 'mismo día',
+    lagDays: (n: number) => `−${n} ${n === 1 ? 'día' : 'días'}`,
+    weekdayFixedEffects: 'Efectos fijos de día de la semana',
+    monthFixedEffects: 'Efectos fijos de mes',
+    needRegressor:
+      'Agrega al menos un regresor. La variable dependiente al mismo día no cuenta: sería y contra y.',
+    familyTitle: 'Familia acumulada de esta sesión',
+    family: (specifications: number, tests: number): ReactNode => (
+      <>
+        <b>
+          {specifications} {specifications === 1 ? 'especificación' : 'especificaciones'} · {tests}{' '}
+          {tests === 1 ? 'coeficiente' : 'coeficientes'} en la familia
+        </b>
+        . Los <b>q</b> de la tabla están corregidos por Benjamini–Hochberg sobre todos ellos, no
+        sobre este modelo solo. Cada especificación nueva empeora los q de las anteriores, y así
+        tiene que ser: buscar entre pares hasta que algo salga significativo produce significancia
+        por construcción. El contador se reinicia al recargar la página, así que este número es un
+        piso de cuánto has buscado, nunca un techo.
+      </>
+    ),
+    familyReset: 'Reiniciar el contador',
+    resultsTitle: 'Coeficientes',
+    colTerm: 'Término',
+    colRole: 'Papel',
+    colCoef: 'Coef.',
+    colCi: 'IC 95%',
+    colSe: 'EE',
+    colP: 'p',
+    colQ: 'q',
+    roleRegressor: 'regresor',
+    roleControl: 'control',
+    fitFooter: (n: string, k: string, r2: string, bandwidth: string) =>
+      `${n} días completos · ${k} parámetros · R² ajustado ${r2} · banda de Bartlett de ${bandwidth} días`,
+    coefficientUnit: (unit: string, dependent: string) =>
+      `Cada coeficiente está en ${unit ? unit : 'unidades'} de ${dependent} por unidad del término.`,
+    perParameter: (value: string) => `${value} observaciones por parámetro`,
+    dropped: (terms: string) => `Descartados por colinealidad: ${terms}`,
+    insufficientWhat: 'este modelo',
+    guard: (perParameter: string, floor: string): ReactNode => (
+      <>
+        El explorador se apaga por debajo de {perParameter} observaciones por parámetro, con piso de{' '}
+        {floor}. Es el punto donde la cobertura real del intervalo HAC deja de empeorar; por debajo,
+        una banda «al 95%» acierta una de cada cinco veces menos de lo que dice. La justificación
+        está medida en <code>docs/metricas.md</code> §6.10.
+      </>
+    ),
+    scatterTitle: (x: string, y: string) => `${x} contra ${y}`,
+    scatterSubtitle: (
+      <>
+        El primer regresor contra la dependiente, sobre exactamente las filas que usó el ajuste. Es
+        la asociación cruda: el coeficiente de arriba está ajustado por todo lo demás del modelo y
+        este dibujo no, así que si discrepan, la diferencia es lo que hacen los controles.
+      </>
+    ),
+    presetsTitle: 'Especificaciones guardadas',
+    presetName: 'Nombre',
+    presetSave: 'Guardar la actual',
+    presetsEmpty: 'Todavía no has guardado ninguna. Se guardan en tu navegador, como el export.',
+    presetDelete: 'Borrar',
+    ci95: (low: string, high: string) => `${low} a ${high}`,
+    groups: {
+      recovery: 'Recuperación',
+      sleep: 'Sueño',
+      training: 'Entrenamiento',
+    },
+    units: {
+      pct: 'pp',
+      ms: 'ms',
+      bpm: 'bpm',
+      min: 'min',
+      h: 'h',
+      kcal: 'kcal',
+      count: '',
+      index: '',
+      sd: 'sd',
+      deg: '°',
+    },
+    fields: {
+      recovery: 'Recuperación',
+      hrv: 'HRV',
+      hrvZ: 'z de HRV',
+      rhr: 'Pulso en reposo',
+      skinTemp: 'Temperatura de piel',
+      spo2: 'SpO₂',
+      respiratoryRate: 'Frecuencia respiratoria',
+      sleepHours: 'Horas de sueño',
+      sleepEfficiency: 'Eficiencia del sueño',
+      sleepConsistency: 'Consistencia horaria',
+      sleepPerformance: 'Rendimiento del sueño',
+      sleepDebt: 'Deuda de sueño',
+      sleepNeed: 'Necesidad de sueño',
+      deep: 'Sueño profundo',
+      rem: 'Sueño REM',
+      light: 'Sueño ligero',
+      awake: 'Tiempo despierto',
+      remShare: '% REM',
+      deepShare: '% profundo',
+      bedtime: 'Hora de acostarse',
+      wakeTime: 'Hora de levantarse',
+      napMinutes: 'Siestas',
+      strain: 'Strain',
+      acwr: 'Carga aguda / crónica',
+      workoutMinutes: 'Minutos de actividad',
+      workoutCount: 'Número de actividades',
+      calories: 'Calorías',
+      maxHr: 'FC máxima',
+      avgHr: 'FC media',
+    },
   },
 
   habits: {

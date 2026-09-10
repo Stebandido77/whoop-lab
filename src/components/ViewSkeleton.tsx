@@ -57,6 +57,13 @@ const LAYOUTS: Record<TabId, { span: number; height: number }[]> = {
     { span: 12, height: 361 },
     { span: 12, height: 401 },
   ],
+  models: [
+    { span: 12, height: 320 },
+    { span: 12, height: 190 },
+    { span: 12, height: 300 },
+    { span: 12, height: 420 },
+    { span: 12, height: 200 },
+  ],
   data: [{ span: 12, height: 639 }],
 };
 

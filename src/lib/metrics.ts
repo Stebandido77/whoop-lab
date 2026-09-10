@@ -3,18 +3,26 @@ import {
   changePoints,
   cusum,
   distributedLag,
+  histogram,
   insufficient,
+  kernelDensity,
   lombScargle,
   ols,
   ratio,
+  silvermanModality,
+  supportGaps,
   type ChangePointsResult,
   type CusumResult,
+  type DensityPoint,
   type Estimate,
+  type HistogramBin,
   type Insufficient,
   type LagCoefficient,
+  type ModalityResult,
   type OlsFit,
   type PeriodogramResult,
   type RatioResult,
+  type SupportGaps,
 } from './econ';
 import { mean, pearson, welchT, type Correlation } from './stats';
 import type { DayRecord } from './whoop/types';
@@ -533,6 +541,14 @@ export function recoveryElasticities(model: AdjustedHabitsResult): ElasticitiesR
 export interface DoseResponse {
   ok: true;
   points: { x: number; y: number }[];
+  /**
+   * Stretches of the x axis with no observation at all.
+   *
+   * A curve drawn across one of those is interpolating between two clusters,
+   * not describing a relationship, and the panel has to say so: every shape
+   * that passes through both groups fits the data equally well there.
+   */
+  gaps: SupportGaps;
   n: number;
   minN: number;
 }
@@ -560,7 +576,65 @@ export function doseResponse(
   }
   return points.length < minN
     ? insufficient(points.length, minN)
-    : { ok: true, points, n: points.length, minN };
+    : {
+        ok: true,
+        points,
+        gaps: supportGaps(points.map((p) => p.x)),
+        n: points.length,
+        minN,
+      };
+}
+
+/* --------------------- 7. Distribución del strain diario ------------------- */
+
+export interface StrainDistribution {
+  ok: true;
+  bins: HistogramBin[];
+  density: DensityPoint[];
+  bandwidth: number;
+  /** The modality test, or its own `Insufficient` when the window is too short. */
+  modality: ModalityResult;
+  mean: number | null;
+  n: number;
+  minN: number;
+}
+
+export type StrainDistributionResult = StrainDistribution | Insufficient;
+
+/**
+ * How the daily strain scores are spread out, as a histogram with the kernel
+ * density over it and a test for whether there is more than one hump.
+ *
+ * This panel exists because of what it explains elsewhere. Somebody who trains
+ * hard on some days and rests on the others does not have a strain distribution
+ * with a middle; they have two groups. Every scatter with strain on the x axis
+ * then shows two clouds and an empty band, which reads as a broken chart and is
+ * in fact the most concrete thing the export has to say about how they train.
+ *
+ * The number of modes is reported at the drawn bandwidth and the *claim* of
+ * bimodality comes from `silvermanModality`, which searches over bandwidths
+ * instead of trusting one. Counting humps at a bandwidth of your choosing is
+ * not a finding, it is a choice.
+ */
+export function strainDistribution(
+  days: DayRecord[],
+  options: { minN?: number; modalityMinN?: number } = {},
+): StrainDistributionResult {
+  const { minN = 30, modalityMinN = 60 } = options;
+  const values = column(days, 'strain').filter((v): v is number => v != null && Number.isFinite(v));
+  if (values.length < minN) return insufficient(values.length, minN);
+
+  const { points, bandwidth } = kernelDensity(values);
+  return {
+    ok: true,
+    bins: histogram(values),
+    density: points,
+    bandwidth,
+    modality: silvermanModality(values, { minN: modalityMinN }),
+    mean: mean(values),
+    n: values.length,
+    minN,
+  };
 }
 
 /* ------------------------- 5. Cambios de régimen -------------------------- */

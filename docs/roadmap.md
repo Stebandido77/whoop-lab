@@ -52,6 +52,13 @@ Ordenado por relación valor/esfuerzo. Cada punto está especificado en
   supuesto.
 - Soporte multiusuario o de entrenadores. Hay productos comerciales para eso.
 
+## Hecho desde entonces
+
+- **Distribución del strain con prueba de modalidad** (§6.10) y advertencia de
+  huecos en el soporte de x en los paneles de dosis y respuesta.
+- **Explorador de modelos** (§7) con familia acumulada de Benjamini–Hochberg y
+  presets en IndexedDB.
+
 ## Deuda técnica conocida
 
 - El parseo corre en el hilo principal. Con exports de más de tres años se nota

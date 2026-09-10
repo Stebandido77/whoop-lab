@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { CalendarHeatmap, recoveryToken, ScatterChart, TimeSeriesChart } from '@/charts';
+import { BinScatterChart, CalendarHeatmap, recoveryToken, TimeSeriesChart } from '@/charts';
 import { KpiCard, Legend, NotEnough, Panel } from '@/components';
 import { f0, f1, f2, fmtDayLong, hoursMinutes, pct, signed, weekdayName } from '@/lib/format';
 import type { RatioProblem } from '@/lib/econ';
@@ -7,6 +7,7 @@ import { useMessages, type Messages } from '@/lib/i18n';
 import {
   adjustedHabitEffects,
   column,
+  doseResponse,
   periodValue,
   recoveryElasticities,
   type ElasticitiesResult,
@@ -34,6 +35,7 @@ export function OverviewView({
   const rhr = periodValue(days, previous, 'rhr');
   const sleep = periodValue(days, previous, 'sleepHours');
   const strainVsNext = pearson(column(days, 'strain'), column(days, 'recoveryNext'));
+  const strainDose = useMemo(() => doseResponse(days, 'strain', 'recoveryNext'), [days]);
 
   return (
     <div className="grid">
@@ -163,24 +165,33 @@ export function OverviewView({
       </Panel>
 
       <Panel span={7} title={m.overview.scatterTitle} subtitle={m.overview.scatterSubtitle}>
-        <ScatterChart
-          height={270}
-          xLabel={m.overview.scatterX}
-          yLabel={m.overview.scatterY}
-          formatY={pct}
-          guideY={67}
-          points={days
-            .filter((d) => d.strain != null && d.recoveryNext != null)
-            .map((d) => ({
-              x: d.strain!,
-              y: d.recoveryNext!,
-              color: recoveryToken(d.recoveryNext),
-              label: fmtDayLong(d.day),
-            }))}
-        />
-        <p className="subtitle" style={{ margin: '10px 0 0' }}>
-          {m.overview.correlation(f2(strainVsNext.r), f0(strainVsNext.n))}
-        </p>
+        {strainDose.ok ? (
+          <>
+            <BinScatterChart
+              points={strainDose.points}
+              height={270}
+              xLabel={m.overview.scatterX}
+              yLabel={m.overview.scatterY}
+              formatY={pct}
+              formatX={f1}
+              color="--strain"
+            />
+            <p className="subtitle" style={{ margin: '10px 0 0' }}>
+              {m.overview.correlation(f2(strainVsNext.r), f0(strainVsNext.n))}
+            </p>
+            {strainDose.gaps.widest && (
+              <p className="callout" style={{ margin: '12px 0 0' }}>
+                {m.common.supportGap(
+                  f1(strainDose.gaps.widest.from),
+                  f1(strainDose.gaps.widest.to),
+                  f0(strainDose.gaps.widest.share * 100),
+                )}
+              </p>
+            )}
+          </>
+        ) : (
+          <NotEnough state={strainDose} what={m.overview.scatterWhat} />
+        )}
       </Panel>
 
       <Elasticities result={elasticities} />

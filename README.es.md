@@ -43,6 +43,20 @@ ninguna hace:
   `sueño.csv` y `entrenamientos.csv` con todos los encabezados traducidos. El
   parser compara subcadenas del encabezado sin acentos en vez de nombres exactos,
   así que entran las dos variantes sin renombrar archivos.
+- **Un explorador de modelos que lleva la cuenta de cuánto buscaste.** Arma
+  cualquier regresión con los campos del registro diario —dependiente, regresores,
+  controles, un rezago por término— y córrela por el mismo motor HAC que todo lo
+  demás. Lo que no hace ninguna otra herramienta: mantiene la familia acumulada de
+  cada regresor probado en la sesión y corrige con Benjamini–Hochberg sobre todos,
+  así que el q de tu tercer modelo empeora cuando corres el vigésimo. Sin eso, un
+  explorador libre es una máquina de p-hacking: prueba suficientes pares y algo
+  sale significativo por construcción.
+- **Te dice cuándo el eje x tiene un hueco.** El strain diario suele ser bimodal
+  —días de descanso en una joroba, días de entreno en otra— y una prueba de ancho
+  de banda crítico de Silverman lo afirma, en vez de dejarte contar jorobas al
+  ancho de banda que elijas. Donde el soporte de x de una gráfica tiene una banda
+  vacía, el panel avisa que la pendiente que la cruza une dos grupos y no describe
+  una relación.
 - **Interfaz en español e inglés**, detectada desde tu navegador y conmutable en
   el encabezado. El formato de números sigue al idioma, para que una coma decimal
   nunca aparezca en una página en inglés.
@@ -55,12 +69,14 @@ para pegar directo en Excel, R o Stata.
 Todo lo de abajo son datos sintéticos de la demo: 420 días generados en tu
 navegador con relaciones reales incorporadas.
 
-|                                                                          |                                                              |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| ![Efecto de los hábitos, ajustado y sin ajustar](docs/img/habits.es.png) | ![Respuesta al impulso del strain](docs/img/training.es.png) |
-| **Hábitos.** Las mismas preguntas estimadas de dos maneras.              | **Entrenamiento.** Cuánto dura de verdad una sesión dura.    |
-| ![Dosis y respuesta del sueño](docs/img/sleep.es.png)                    | ![Vista general en oscuro](docs/img/overview-dark.es.png)    |
-| **Sueño.** Dónde las horas de más dejan de comprar recuperación.         | **Modo oscuro**, siguiendo al sistema o a tu elección.       |
+|                                                                          |                                                                   |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| ![Efecto de los hábitos, ajustado y sin ajustar](docs/img/habits.es.png) | ![Respuesta al impulso del strain](docs/img/training.es.png)      |
+| **Hábitos.** Las mismas preguntas estimadas de dos maneras.              | **Entrenamiento.** Cuánto dura de verdad una sesión dura.         |
+| ![Dosis y respuesta del sueño](docs/img/sleep.es.png)                    | ![Vista general en oscuro](docs/img/overview-dark.es.png)         |
+| **Sueño.** Dónde las horas de más dejan de comprar recuperación.         | **Modo oscuro**, siguiendo al sistema o a tu elección.            |
+| ![Explorador de modelos](docs/img/models.es.png)                         | ![Distribución del strain](docs/img/training-distribution.es.png) |
+| **Modelos.** La regresión que quieras, con la búsqueda contada.          | **Distribución.** Dos modas, nombradas y puestas a prueba.        |
 
 ## Privacidad
 
@@ -138,17 +154,17 @@ versionan, y `src/test/fixture.test.ts` corre el pipeline completo sobre ellos.
 
 ## Decisiones técnicas
 
-| Decisión                                           | Razón                                                                                                                                                   |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| React 19 + TypeScript estricto + Vite              | Aburrido, rápido, y el sistema de tipos hace trabajo real en `src/lib/whoop/types.ts`                                                                   |
-| Econometría escrita a mano en `src/lib/econ/`      | Mínimos cuadrados por QR, covarianza HAC y HC1, rezagos distribuidos, LOESS, Lomb–Scargle. Ninguna dependencia hace esto en un tamaño que valga la pena |
-| Gráficas SVG propias sobre `d3-scale` / `d3-shape` | Una librería de charts habría que pelearla para conservar esta estética. d3 pone la matemática; los componentes ponen los píxeles                       |
-| CSS plano con custom properties                    | Toda la paleta vive en `src/styles/tokens.css`. Las gráficas resuelven colores de los mismos tokens, así claro y oscuro no se duplican                  |
-| Dos objetos de mensajes tipados, sin librería i18n | `Messages` es `typeof es`, así que una clave agregada en un idioma y olvidada en el otro falla en `npm run typecheck` en vez de llegar a producción     |
-| Zustand                                            | Un store pequeño, sin ceremonia                                                                                                                         |
-| IndexedDB con `idb-keyval`                         | Un diario de varios años se pasa del presupuesto de localStorage                                                                                        |
+| Decisión                                           | Razón                                                                                                                                                                                     |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| React 19 + TypeScript estricto + Vite              | Aburrido, rápido, y el sistema de tipos hace trabajo real en `src/lib/whoop/types.ts`                                                                                                     |
+| Econometría escrita a mano en `src/lib/econ/`      | Mínimos cuadrados por QR, covarianza HAC y HC1, rezagos distribuidos, LOESS, Lomb–Scargle, prueba de modalidad de Silverman. Ninguna dependencia hace esto en un tamaño que valga la pena |
+| Gráficas SVG propias sobre `d3-scale` / `d3-shape` | Una librería de charts habría que pelearla para conservar esta estética. d3 pone la matemática; los componentes ponen los píxeles                                                         |
+| CSS plano con custom properties                    | Toda la paleta vive en `src/styles/tokens.css`. Las gráficas resuelven colores de los mismos tokens, así claro y oscuro no se duplican                                                    |
+| Dos objetos de mensajes tipados, sin librería i18n | `Messages` es `typeof es`, así que una clave agregada en un idioma y olvidada en el otro falla en `npm run typecheck` en vez de llegar a producción                                       |
+| Zustand                                            | Un store pequeño, sin ceremonia                                                                                                                                                           |
+| IndexedDB con `idb-keyval`                         | Un diario de varios años se pasa del presupuesto de localStorage                                                                                                                          |
 
-La descarga inicial es de **82 kB gzip** (chunk de entrada más CSS), de los cuales
+La descarga inicial es de **87 kB gzip** (chunk de entrada más CSS), de los cuales
 React son 61 kB. Cada pestaña es un chunk diferido aparte, así que una primera
 visita paga la pantalla de importación y nada más, y el parser de CSV —JSZip y
 PapaParse, 40 kB gzip entre los dos— se carga solo cuando de verdad sueltas un
@@ -161,11 +177,15 @@ archivo. El mapa completo está en
 src/
   lib/whoop/     mapeo de columnas, parseo de CSV, modelo de día
   lib/econ/      MCO con HAC/HC1, rezagos distribuidos, método delta, BH,
-                 binscatter + LOESS, CUSUM + puntos de cambio, Lomb–Scargle
+                 binscatter + LOESS, CUSUM + puntos de cambio, Lomb–Scargle,
+                 densidad kernel + modalidad de Silverman + huecos de soporte
+  lib/explorer.ts, lib/fields.ts
+                 el explorador de modelos: catálogo de campos, gramática de
+                 especificaciones, familia acumulada y presets guardados
   lib/i18n/      los catálogos de mensajes en español e inglés, y el hook
   lib/           estadística, formato, métricas derivadas, demo, storage
   charts/        TimeSeries, StackedBar, Scatter, BinScatter, Coefficient,
-                 Irf, Spectrum, HBar, CalendarHeatmap, Sparkline
+                 Irf, Spectrum, Histogram, HBar, CalendarHeatmap, Sparkline
   components/    Panel, KpiCard, Legend, Segmented, ImportView, ViewSkeleton
   views/         un archivo por pestaña, cada uno su propio chunk diferido
   state/         store de zustand y el selector de rango

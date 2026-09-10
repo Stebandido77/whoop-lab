@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
-import { BinScatterChart, HBarChart, IrfChart, TimeSeriesChart } from '@/charts';
+import { BinScatterChart, HBarChart, HistogramChart, IrfChart, TimeSeriesChart } from '@/charts';
 import { NotEnough, Panel } from '@/components';
-import { f0, f1, f2, hoursMinutes, pct, signed } from '@/lib/format';
+import { f0, f1, f2, hoursMinutes, pct, pRelation, signed } from '@/lib/format';
 import { useMessages } from '@/lib/i18n';
 import {
   doseResponse,
+  strainDistribution,
   strainImpulseResponse,
   summarizeActivities,
   zoneMinutes,
@@ -20,6 +21,7 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
   const zones = zoneMinutes(days);
   const irf = useMemo(() => strainImpulseResponse(days), [days]);
   const dose = useMemo(() => doseResponse(days, 'strain', 'recoveryNext'), [days]);
+  const distribution = useMemo(() => strainDistribution(days), [days]);
   const weeks = byWeek(days, ['workoutMinutes', 'workoutCount', 'strain']).map((w) => ({
     ...w,
     totalMinutes:
@@ -59,17 +61,88 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
         )}
       </Panel>
 
+      <Panel
+        span={12}
+        title={m.training.distributionTitle}
+        subtitle={m.training.distributionSubtitle}
+      >
+        {distribution.ok ? (
+          <>
+            <HistogramChart
+              bins={distribution.bins}
+              density={distribution.density}
+              peaks={distribution.modality.ok ? distribution.modality.peaks : []}
+              antimode={distribution.modality.ok ? distribution.modality.antimode : null}
+              xLabel={m.training.distributionAxis}
+              formatX={f1}
+              color="--strain"
+              height={280}
+            />
+            {distribution.modality.ok ? (
+              <>
+                <div className="callout" style={{ marginTop: 12 }}>
+                  {distribution.modality.p < 0.05 && distribution.modality.antimode
+                    ? m.training.bimodal(
+                        f1(
+                          Math.min(
+                            ...distribution.modality.peaks.slice(0, 2).map((peak) => peak.x),
+                          ),
+                        ),
+                        f1(
+                          Math.max(
+                            ...distribution.modality.peaks.slice(0, 2).map((peak) => peak.x),
+                          ),
+                        ),
+                        pRelation(distribution.modality.p),
+                        f0((distribution.modality.separation ?? 0) * 100),
+                      )
+                    : m.training.unimodal(pRelation(distribution.modality.p))}
+                </div>
+                <p className="subtitle" style={{ margin: '8px 0 0' }}>
+                  {m.training.modalityShort(
+                    distribution.modality.modes,
+                    pRelation(distribution.modality.p),
+                  )}{' '}
+                  ·{' '}
+                  {m.training.modalityBandwidth(
+                    f2(distribution.modality.ruleOfThumbBandwidth),
+                    f2(distribution.modality.criticalBandwidth),
+                  )}
+                </p>
+              </>
+            ) : (
+              <p className="subtitle" style={{ margin: '10px 0 0' }}>
+                <NotEnough state={distribution.modality} what={m.training.distributionWhat} />
+              </p>
+            )}
+          </>
+        ) : (
+          <NotEnough state={distribution} what={m.training.distributionWhat} />
+        )}
+      </Panel>
+
       <Panel span={12} title={m.training.doseTitle} subtitle={m.training.doseSubtitle}>
         {dose.ok ? (
-          <BinScatterChart
-            points={dose.points}
-            xLabel={m.training.doseX}
-            yLabel={m.training.doseY}
-            formatY={pct}
-            formatX={f1}
-            color="--strain"
-            height={300}
-          />
+          <>
+            <BinScatterChart
+              points={dose.points}
+              xLabel={m.training.doseX}
+              yLabel={m.training.doseY}
+              formatY={pct}
+              formatX={f1}
+              color="--strain"
+              height={300}
+            />
+            {dose.gaps.widest && (
+              <p className="callout" style={{ margin: '12px 0 0' }}>
+                {m.common.supportGap(
+                  f1(dose.gaps.widest.from),
+                  f1(dose.gaps.widest.to),
+                  f0(dose.gaps.widest.share * 100),
+                )}
+              </p>
+            )}
+          </>
         ) : (
           <NotEnough state={dose} what={m.training.doseWhat} />
         )}

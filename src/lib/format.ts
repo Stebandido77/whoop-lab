@@ -105,6 +105,43 @@ export const f1 = (v: number | null | undefined) =>
 export const f2 = (v: number | null | undefined) =>
   v == null || !Number.isFinite(v) ? '—' : nf(2, 2).format(v);
 
+/**
+ * Three significant digits, however small the number is.
+ *
+ * A model explorer produces coefficients on wildly different scales — points of
+ * recovery per hour of sleep is around 1, per kilocalorie is around 0,001 — and
+ * a fixed two decimals prints the second one as «0,00», which reads as «no
+ * effect» rather than «different unit».
+ */
+export const sig = (v: number | null | undefined, digits = 3) => {
+  if (v == null || !Number.isFinite(v)) return '—';
+  const key = `${locale}:sig:${digits}`;
+  let cached = numberCache.get(key);
+  if (!cached) {
+    cached = new Intl.NumberFormat(locale, { maximumSignificantDigits: digits });
+    numberCache.set(key, cached);
+  }
+  return cached.format(v);
+};
+
+/**
+ * A p or q value, which needs a floor rather than rounding.
+ *
+ * `f2` turns 0,0004 into «0,00», and a reader is entitled to read that as zero.
+ * No p-value in this project is zero — a bootstrap over 200 draws cannot go
+ * below 1/201, and a t-distribution never reaches it either — so below a
+ * thousandth the honest thing to print is the bound.
+ */
+export const pValue = (v: number | null | undefined) =>
+  v == null || !Number.isFinite(v) ? '—' : v < 0.001 ? `< ${sig(0.001, 1)}` : sig(v, 2);
+
+/**
+ * The same value with its relation attached, for running prose: `= 0,005` or
+ * `< 0,001`, so a sentence can say «p < 0,001» rather than «p = < 0,001».
+ */
+export const pRelation = (v: number | null | undefined) =>
+  v == null || !Number.isFinite(v) ? '= —' : v < 0.001 ? `< ${sig(0.001, 1)}` : `= ${sig(v, 2)}`;
+
 /** Thousands separators, no decimals: row counts on the import screen. */
 export const count = (v: number) => nf(0, 0).format(v);
 
