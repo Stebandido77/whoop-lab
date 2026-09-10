@@ -70,6 +70,25 @@ export const es = {
         Hay {n} de los {minN} que pide.
       </>
     ),
+    offHeadline: (what: string) => `Todavía no hay muestra para estimar ${what}.`,
+    offProgress: (n: string, minN: string, percent: string) =>
+      `${n} de ${minN} días completos · ${percent}%`,
+    offForecastDate: (day: string, missing: string) =>
+      `Al ritmo de un día por día se enciende el ${day} —dentro de ${missing} ${missing === '1' ? 'día' : 'días'}—, suponiendo que cada día a partir de hoy traiga un registro completo.`,
+    offForecastRange: (minN: string) =>
+      `Con este rango no se enciende nunca: pide ${minN} días y la ventana es más corta. Cambia el rango a «Todo».`,
+    offForecastWindow:
+      'La ventana ya está llena, así que cada día nuevo empuja uno viejo fuera y esperar no la agranda. Amplía el rango.',
+    offBindingDecisive: (field: string, without: string) =>
+      `El cuello de botella es una sola variable: «${field}». Sin ella habría ${without} días completos, que ya alcanzarían.`,
+    offBinding: (field: string, without: string, current: string) =>
+      `La variable que más días cuesta es «${field}»: sin ella habría ${without} en vez de ${current}. No alcanza por sí sola.`,
+    offMeanwhile: 'Lo que sí se puede decir con lo que hay:',
+    offVariable: 'Variable',
+    offN: 'n',
+    offMissing: 'faltan',
+    offMean: 'media',
+    offSd: 'desv.',
     thisModel: 'este modelo',
     noPreviousPeriod: 'sin periodo previo',
     vsPreviousPeriod: 'vs. periodo anterior',
@@ -86,10 +105,52 @@ export const es = {
   },
 
   /**
+   * Names of the day-record columns, in one place.
+   *
+   * They started inside the model explorer's section, which was where the first
+   * reader of them lived. They are not the explorer's: a switched-off panel
+   * naming the variables it is waiting on wants exactly the same labels, and
+   * reaching into another view's section for them would have been a lie about
+   * where they belong.
+   */
+  fields: {
+    recovery: 'Recuperación',
+    hrv: 'HRV',
+    hrvZ: 'z de HRV',
+    rhr: 'Pulso en reposo',
+    skinTemp: 'Temperatura de piel',
+    spo2: 'SpO₂',
+    respiratoryRate: 'Frecuencia respiratoria',
+    sleepHours: 'Horas de sueño',
+    sleepEfficiency: 'Eficiencia del sueño',
+    sleepConsistency: 'Consistencia horaria',
+    sleepPerformance: 'Rendimiento del sueño',
+    sleepDebt: 'Deuda de sueño',
+    sleepNeed: 'Necesidad de sueño',
+    deep: 'Sueño profundo',
+    rem: 'Sueño REM',
+    light: 'Sueño ligero',
+    awake: 'Tiempo despierto',
+    remShare: '% REM',
+    deepShare: '% profundo',
+    bedtime: 'Hora de acostarse',
+    wakeTime: 'Hora de levantarse',
+    napMinutes: 'Siestas',
+    strain: 'Strain',
+    acwr: 'Carga aguda / crónica',
+    workoutMinutes: 'Minutos de actividad',
+    workoutCount: 'Número de actividades',
+    calories: 'Calorías',
+    maxHr: 'FC máxima',
+    avgHr: 'FC media',
+  },
+
+  /**
    * Strings the chart components print themselves: empty states, tooltips, axis
    * captions and legends. They live with the charts rather than with the views
    * because the same chart says the same thing wherever it is mounted.
    */
+
   charts: {
     noData: 'Sin datos en este rango',
     noDataShort: 'sin datos',
@@ -641,37 +702,6 @@ export const es = {
       index: '',
       sd: 'sd',
       deg: '°',
-    },
-    fields: {
-      recovery: 'Recuperación',
-      hrv: 'HRV',
-      hrvZ: 'z de HRV',
-      rhr: 'Pulso en reposo',
-      skinTemp: 'Temperatura de piel',
-      spo2: 'SpO₂',
-      respiratoryRate: 'Frecuencia respiratoria',
-      sleepHours: 'Horas de sueño',
-      sleepEfficiency: 'Eficiencia del sueño',
-      sleepConsistency: 'Consistencia horaria',
-      sleepPerformance: 'Rendimiento del sueño',
-      sleepDebt: 'Deuda de sueño',
-      sleepNeed: 'Necesidad de sueño',
-      deep: 'Sueño profundo',
-      rem: 'Sueño REM',
-      light: 'Sueño ligero',
-      awake: 'Tiempo despierto',
-      remShare: '% REM',
-      deepShare: '% profundo',
-      bedtime: 'Hora de acostarse',
-      wakeTime: 'Hora de levantarse',
-      napMinutes: 'Siestas',
-      strain: 'Strain',
-      acwr: 'Carga aguda / crónica',
-      workoutMinutes: 'Minutos de actividad',
-      workoutCount: 'Número de actividades',
-      calories: 'Calorías',
-      maxHr: 'FC máxima',
-      avgHr: 'FC media',
     },
   },
 

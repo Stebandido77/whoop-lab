@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Panel } from '@/components';
+import { Panel, PanelGrid } from '@/components';
 import { f0, f1 } from '@/lib/format';
 import { useMessages, type Messages } from '@/lib/i18n';
 import type { DayRecord } from '@/lib/whoop/types';
@@ -64,7 +64,7 @@ export function DataView({ days }: { days: DayRecord[] }) {
   }
 
   return (
-    <div className="grid">
+    <PanelGrid days={days}>
       <Panel span={12} title={m.data.title} subtitle={m.data.subtitle}>
         <div className="controls" style={{ marginBottom: 10 }}>
           <button type="button" onClick={() => void copy()}>
@@ -102,6 +102,6 @@ export function DataView({ days }: { days: DayRecord[] }) {
           </table>
         </div>
       </Panel>
-    </div>
+    </PanelGrid>
   );
 }

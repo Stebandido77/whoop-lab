@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BinScatterChart } from '@/charts';
-import { NotEnough, Panel } from '@/components';
+import { Panel, PanelGrid } from '@/components';
 import { f0, f1, f2, pValue, sig, signed } from '@/lib/format';
 import { useMessages, type Messages } from '@/lib/i18n';
 import { FIELD_GROUPS, FIELDS, fieldSpec, type FieldId } from '@/lib/fields';
@@ -66,12 +66,12 @@ export function ModelsView({ days }: { days: DayRecord[] }) {
     await savePresets(next);
   }
 
-  const label = (id: FieldId) => m.models.fields[id];
+  const label = (id: FieldId) => m.fields[id];
   const termLabel = (t: TermSpec) =>
     t.lag === 0 ? label(t.field) : `${label(t.field)} (${m.models.lagDays(t.lag)})`;
 
   return (
-    <div className="grid">
+    <PanelGrid days={days}>
       <Panel span={12} title={m.models.title} subtitle={m.models.subtitle}>
         <Builder spec={spec} onChange={setSpec} m={m} />
       </Panel>
@@ -90,17 +90,25 @@ export function ModelsView({ days }: { days: DayRecord[] }) {
         </button>
       </Panel>
 
-      <Panel span={12} title={m.models.resultsTitle}>
+      <Panel
+        span={12}
+        title={m.models.resultsTitle}
+        state={runnable && result && !result.ok ? result : undefined}
+        needs={[
+          spec.dependent,
+          ...spec.regressors.map((t) => t.field),
+          ...spec.controls.map((t) => t.field),
+        ]}
+        what={m.models.insufficientWhat}
+        offExtra={
+          <p className="subtitle" style={{ margin: '4px 0 0' }}>
+            {m.models.guard(f0(OBSERVATIONS_PER_PARAMETER), f0(ABSOLUTE_MIN_N))}
+          </p>
+        }
+      >
         {!runnable ? (
           <p className="empty">{m.models.needRegressor}</p>
-        ) : !result?.ok ? (
-          <>
-            <NotEnough state={result!} what={m.models.insufficientWhat} />
-            <p className="subtitle" style={{ margin: '10px 0 0' }}>
-              {m.models.guard(f0(OBSERVATIONS_PER_PARAMETER), f0(ABSOLUTE_MIN_N))}
-            </p>
-          </>
-        ) : (
+        ) : !result?.ok ? null : (
           <>
             <div className="table-box scroll-x">
               <table>
@@ -259,7 +267,7 @@ export function ModelsView({ days }: { days: DayRecord[] }) {
           </table>
         )}
       </Panel>
-    </div>
+    </PanelGrid>
   );
 }
 
@@ -287,7 +295,7 @@ function FieldSelect({
         <optgroup key={group} label={m.models.groups[group]}>
           {FIELDS.filter((f) => f.group === group && f.id !== exclude).map((f) => (
             <option key={f.id} value={f.id}>
-              {m.models.fields[f.id]}
+              {m.fields[f.id]}
             </option>
           ))}
         </optgroup>

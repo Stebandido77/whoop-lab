@@ -36,16 +36,24 @@ de valor del proyecto.
    `src/styles/tokens.css`. Los componentes de gráfica reciben el nombre del
    token (`'--hi'`, `'--strain'`) y lo resuelven con `useResolvedColor`. Nunca
    escribas un hex dentro de un componente.
-3. **`null` significa "no hay dato", nunca `0`.** El export tiene huecos. Las
+3. **Ningún estado deja un hueco.** Las vistas envuelven sus paneles en
+   `<PanelGrid days={days}>` y nunca escriben `<div className="grid">` a mano. Un
+   panel que puede apagarse recibe el resultado del estimador en `state`, las
+   variables que habría usado en `needs` y qué estima en `what`; con eso la
+   retícula lo colapsa a su contenido, recompone la fila y llena el espacio con
+   progreso, fecha de encendido y descriptivos. El panel tiene que ser **hijo
+   directo** de `PanelGrid`: un componente que esconda un `<Panel>` adentro es
+   invisible para el layout.
+4. **`null` significa "no hay dato", nunca `0`.** El export tiene huecos. Las
    ventanas móviles emiten `null` mientras no haya suficientes observaciones, y
    las correlaciones devuelven `r: null` por debajo de `minN`. No rellenes.
-4. **Las fechas son locales.** Nunca uses `toISOString()` para derivar un día:
+5. **Las fechas son locales.** Nunca uses `toISOString()` para derivar un día:
    corre la fecha a UTC y mueve las noches de día. Usa `dayKey` de
    `src/lib/format.ts`.
-5. **El día de un ciclo es la mañana en que viste el score.** Se toma de
+6. **El día de un ciclo es la mañana en que viste el score.** Se toma de
    `Wake onset`; si falta, se desplaza el `Cycle start time` de la noche. Esa
    convención está en `cycleDay` y de ella dependen todos los lags.
-6. **Sin dependencias nuevas sin justificación.** La carga inicial —el chunk de
+7. **Sin dependencias nuevas sin justificación.** La carga inicial —el chunk de
    entrada más el CSS— está por debajo de 130 kB gzip, y ahí es donde se mide el
    presupuesto. Cada pestaña es un chunk diferido aparte y el parser de CSV solo
    se descarga al soltar un archivo, así que una dependencia nueva pesa según

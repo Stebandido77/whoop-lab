@@ -7,7 +7,7 @@ import {
   IrfChart,
   TimeSeriesChart,
 } from '@/charts';
-import { NotEnough, Panel } from '@/components';
+import { NotEnough, Panel, PanelGrid } from '@/components';
 import { f0, f1, f2, hoursMinutes, pct, pRelation, signed } from '@/lib/format';
 import { useMessages } from '@/lib/i18n';
 import {
@@ -38,9 +38,16 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
   }));
 
   return (
-    <div className="grid">
-      <Panel span={12} title={m.training.irfTitle} subtitle={m.training.irfSubtitle}>
-        {irf.ok ? (
+    <PanelGrid days={days}>
+      <Panel
+        span={12}
+        title={m.training.irfTitle}
+        subtitle={m.training.irfSubtitle}
+        state={irf}
+        needs={['recovery', 'strain', 'sleepHours']}
+        what={m.training.irfWhat}
+      >
+        {irf.ok && (
           <>
             <IrfChart
               points={irf.lags}
@@ -65,8 +72,6 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
               </span>
             </div>
           </>
-        ) : (
-          <NotEnough state={irf} what={m.training.irfWhat} />
         )}
       </Panel>
 
@@ -74,8 +79,11 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
         span={12}
         title={m.training.distributionTitle}
         subtitle={m.training.distributionSubtitle}
+        state={distribution}
+        needs={['strain']}
+        what={m.training.distributionWhat}
       >
-        {distribution.ok ? (
+        {distribution.ok && (
           <>
             <HistogramChart
               bins={distribution.bins}
@@ -125,13 +133,18 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
               </p>
             )}
           </>
-        ) : (
-          <NotEnough state={distribution} what={m.training.distributionWhat} />
         )}
       </Panel>
 
-      <Panel span={12} title={m.training.doseTitle} subtitle={m.training.doseSubtitle}>
-        {dose.ok ? (
+      <Panel
+        span={12}
+        title={m.training.doseTitle}
+        subtitle={m.training.doseSubtitle}
+        state={dose}
+        needs={['strain', 'recovery']}
+        what={m.training.doseWhat}
+      >
+        {dose.ok && (
           <>
             <BinScatterChart
               points={dose.points}
@@ -152,13 +165,18 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
               </p>
             )}
           </>
-        ) : (
-          <NotEnough state={dose} what={m.training.doseWhat} />
         )}
       </Panel>
 
-      <Panel span={12} title={m.training.heatmapTitle} subtitle={m.training.heatmapSubtitle}>
-        {weekLoad.ok ? (
+      <Panel
+        span={12}
+        title={m.training.heatmapTitle}
+        subtitle={m.training.heatmapSubtitle}
+        state={weekLoad}
+        needs={['strain', 'workoutCount']}
+        what={m.training.heatmapWhat}
+      >
+        {weekLoad.ok && (
           <>
             <ActivityHeatmap data={weekLoad} />
             {weekLoad.hidden.activities > 0 && (
@@ -170,8 +188,6 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
               </p>
             )}
           </>
-        ) : (
-          <NotEnough state={weekLoad} what={m.training.heatmapWhat} />
         )}
       </Panel>
 
@@ -274,6 +290,6 @@ export function TrainingView({ days }: { days: DayRecord[] }) {
           ]}
         />
       </Panel>
-    </div>
+    </PanelGrid>
   );
 }

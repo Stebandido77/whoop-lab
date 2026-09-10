@@ -6,7 +6,7 @@ import {
   StackedBarChart,
   TimeSeriesChart,
 } from '@/charts';
-import { KpiCard, Legend, NotEnough, Panel } from '@/components';
+import { KpiCard, Legend, Panel, PanelGrid } from '@/components';
 import { clockTime, f0, f1, fmtDayLong, pct } from '@/lib/format';
 import { useMessages } from '@/lib/i18n';
 import { column, doseResponse, periodValue } from '@/lib/metrics';
@@ -36,9 +36,16 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
   const dose = useMemo(() => doseResponse(days, 'sleepHours', 'recovery'), [days]);
 
   return (
-    <div className="grid">
-      <Panel span={12} title={m.sleep.doseTitle} subtitle={m.sleep.doseSubtitle}>
-        {dose.ok ? (
+    <PanelGrid days={days}>
+      <Panel
+        span={12}
+        title={m.sleep.doseTitle}
+        subtitle={m.sleep.doseSubtitle}
+        state={dose}
+        needs={['sleepHours', 'recovery']}
+        what={m.sleep.doseWhat}
+      >
+        {dose.ok && (
           <>
             <BinScatterChart
               points={dose.points}
@@ -59,8 +66,6 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
               </p>
             )}
           </>
-        ) : (
-          <NotEnough state={dose} what={m.sleep.doseWhat} />
         )}
       </Panel>
       <Panel
@@ -231,6 +236,6 @@ export function SleepView({ days, previous }: { days: DayRecord[]; previous: Day
           ]}
         />
       </Panel>
-    </div>
+    </PanelGrid>
   );
 }

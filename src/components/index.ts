@@ -1,4 +1,7 @@
 export * from './Panel';
+export * from './PanelGrid';
+export * from './panelLayout';
+export * from './PanelOff';
 export * from './KpiCard';
 export * from './Legend';
 export * from './Segmented';

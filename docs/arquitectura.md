@@ -332,6 +332,82 @@ Una vista por pestaña. Cada panel es un `<Panel>` con título, subtítulo y una
 gráfica. Los subtítulos explican qué mide el gráfico y bajo qué supuesto; son
 contenido, no adorno.
 
+#### La retícula se recompone: `PanelGrid`
+
+**Ningún estado de la aplicación puede dejar un hueco.** Con una muestra corta
+—que es la de cualquiera que acabe de comprar la pulsera— media docena de paneles
+se apagan a la vez, y una retícula escrita a mano en cada vista producía dos
+cosas que se leen como error de maquetación y no como decisión: un panel vivo de
+5 columnas al lado de uno apagado de 7, con media pantalla vacía, y el panel
+apagado estirado a la altura de la gráfica que no dibuja para mostrar dos líneas.
+
+`PanelGrid` resuelve eso en un solo lugar. La regla es una sola y de ella sale
+todo lo demás: **una fila siempre mide doce columnas exactas.** Los paneles se
+empacan en orden en filas que quepan y lo que a una fila le falte se reparte
+entre sus miembros. Un panel vivo varado junto a uno apagado queda solo en su
+fila —una frontera entre encendidos y apagados cierra la fila— y crece hasta
+llenarla. Una racha de apagados se redeclara angosta para que compartan fila,
+porque su contenido ya no es una gráfica sino una barra de progreso y una tabla
+corta. El orden nunca se toca: la secuencia de paneles es el argumento que hace
+la vista, y reordenarla para empacar mejor sería reescribir ese argumento.
+
+El algoritmo puro vive en `components/panelLayout.ts` con sus pruebas, incluida
+una que recorre cuatrocientas combinaciones de anchos y estados y exige que toda
+fila mida doce.
+
+**Cómo se declara un panel apagable.** La vista sigue escribiendo JSX; lo que
+cambia es que el `<Panel>` recibe el resultado del estimador:
+
+```tsx
+<Panel span={12} state={irf} needs={['recovery', 'strain', 'sleepHours']} what={…}>
+  {irf.ok && <IrfChart points={irf.lags} … />}
+</Panel>
+```
+
+`PanelGrid` lee `span` y `state` de sus hijos directos en vez de recibir una
+lista de descriptores. La versión con descriptores fue la otra candidata y pierde
+algo real: el cuerpo de un panel es JSX que estrecha su propio tipo
+(`{irf.ok && …}`), y meterlo en un objeto de datos convierte cada cuerpo en un
+thunk o en un cast. El costo es que **un panel tiene que ser hijo directo**: un
+componente que esconda un `<Panel>` adentro es invisible para la retícula. Por eso
+`Elasticities` y `Highlights` de la vista de resumen devuelven el contenido y no
+el panel.
+
+El ancho resuelto viaja como custom property `--span` y no como clase, porque el
+resolvedor produce cualquier ancho de 1 a 12. La clase `.grid-panel` es la que
+limita la regla a los paneles que la retícula sí gobierna: `.grid > .panel` a
+secas también agarraba las tarjetas de KPI —que son `.panel` dentro de su propia
+retícula anidada, con clase `.span-3`— y les ganaba en especificidad, así que
+cada tarjeta salía a ancho completo.
+
+#### El estado apagado tiene contenido: `PanelOff`
+
+Un panel que solo dice «faltan 94 días» desperdicia el espacio y, peor, deja sin
+responder la pregunta que el lector sí tiene: qué **se puede** decir con lo que ya
+hay. `PanelOff` usa ese espacio para tres cosas:
+
+1. **Una barra de progreso** hacia el n mínimo, con el conteo.
+2. **Cuándo se enciende.** No es «hoy más los días que faltan»: la ventana es
+   móvil, así que si es más corta que el mínimo no se enciende nunca —y lo que
+   corresponde decir es que se amplíe el rango— y si ya está llena, un día nuevo
+   empuja uno viejo y esperar no la agranda. Solo cuando la ventana tiene sitio
+   un día más significa una fila más, y aun ahí se dice el supuesto: que cada día
+   a partir de hoy traiga un registro completo.
+3. **Descriptivos de las variables que el panel habría usado**: media, desviación,
+   n y cuántos días faltan por cada una. Ninguna de esas cuatro necesita mínimo,
+   así que son verdad hoy. Y cuando una sola columna es la que cuesta las filas
+   —la eliminación listwise hace que una variable rala decida la muestra de
+   todo— se nombra: «sin ella habría 142 días completos».
+
+Las tres salen de `metrics.ts` §10 y se prueban ahí. `PanelOff` necesita las filas
+del rango y las recibe por contexto desde `PanelGrid`, no por prop: pasar `days`
+por cuarenta `<Panel>` sería cargar en todos una prop que solo importa en un
+estado.
+
+`NotEnough` sigue existiendo para un resultado insuficiente **anidado dentro** de
+un panel encendido —la prueba de modalidad dentro del histograma de strain—, donde
+una barra de progreso y una tabla serían desproporcionadas.
+
 ## Estado
 
 Un store de Zustand con el export crudo, los `DayRecord`, las preguntas del
@@ -362,6 +438,12 @@ setExport(data, { source: 'local' })
 ```
 
 Reglas del flujo:
+
+`?demo=<días>` genera esa cantidad de días en vez de los 420 por omisión. Existe
+por una razón: casi todos los paneles tienen muestra mínima, y la única forma de
+ver cómo se ven por debajo de ella —que es lo que ve cualquiera con una cuenta
+recién estrenada— es pedir una muestra corta. `?demo=58` es el escenario contra
+el que se revisó la retícula.
 
 - **`data/` gana sobre IndexedDB.** Mientras haya CSV en la carpeta, esa es la
   fuente. «Cargar otro export» sigue funcionando y sobreescribe lo cargado

@@ -873,3 +873,50 @@ miró y descartó antes de que el contador existiera, ni de las decisiones tomad
 mirando los datos —qué rango seleccionar, qué controles parecían razonables— que
 son grados de libertad igual de reales. La corrección hace el problema visible y
 lo acota; no lo elimina.
+
+---
+
+## 8. Lo que se puede decir sin muestra
+
+Tres funciones que existen para el estado apagado de un panel. No estiman nada:
+describen lo que hay, que es justo lo que sigue siendo verdad cuando el
+estimador se niega.
+
+### 8.1 Descriptivos por variable — `describeVariables`
+
+Media, desviación estándar, n con dato y días sin dato, por cada variable que el
+panel habría usado, en la unidad de presentación del campo (la hora de acostarse
+en horas, no en minutos).
+
+Ninguna de las cuatro tiene mínimo, porque ninguna necesita más de una columna.
+Un panel apagado que solo escribe «faltan 94 días» está tirando a la basura la
+respuesta a la pregunta que el lector sí tiene.
+
+### 8.2 La variable que cuesta las filas — `bindingVariable`
+
+La eliminación listwise (§6.1) hace que una sola columna rala decida la muestra
+de todo el modelo: la temperatura de piel llegó tarde al export, y un modelo que
+la pida puede quedarse en cincuenta filas mientras las demás variables tienen
+doscientas.
+
+Para cada variable se cuentan las filas completas que habría **sin** ella. Se
+reporta la de mayor ganancia, con una marca de si soltarla sola ya bastaría para
+llegar al mínimo. Con menos de dos variables no hay cuello de botella que buscar,
+y si todas están igual de completas tampoco.
+
+**Es un diagnóstico, no una sugerencia.** El panel pide las variables que pide;
+lo que esto dice es a dónde se está yendo la espera.
+
+### 8.3 Cuándo se enciende — `forecastSwitchOn`
+
+La respuesta ingenua —hoy más los días que faltan— es falsa en dos situaciones
+fáciles de habitar, y una fecha que no va a llegar es peor que ninguna fecha.
+
+La ventana del tablero es móvil. Si es más corta que el mínimo del modelo, no se
+llega esperando: lo que corresponde decir es que se amplíe el rango. Si ya está
+llena, mañana suma un día por delante y suelta uno por detrás, de modo que el
+conteo se mueve por razones que no tienen que ver con esperar. Solo cuando la
+ventana todavía tiene sitio un día más es una fila más.
+
+Aun entonces supone que cada día de aquí en adelante trae un registro completo
+para ese panel, que es el caso optimista. El texto lo dice.

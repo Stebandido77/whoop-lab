@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { CoefficientPlot, HBarChart } from '@/charts';
-import { NotEnough, Panel, Segmented } from '@/components';
+import { Panel, PanelGrid, Segmented } from '@/components';
 import { f0, f1, f2, pct, signed } from '@/lib/format';
 import { useMessages } from '@/lib/i18n';
 import { adjustedHabitEffects, habitEffects } from '@/lib/metrics';
@@ -25,7 +25,7 @@ export function HabitsView({ days, questions }: { days: DayRecord[]; questions: 
   }
 
   return (
-    <div className="grid">
+    <PanelGrid days={days}>
       <div style={{ gridColumn: 'span 12' }}>
         <Segmented
           options={[
@@ -38,8 +38,15 @@ export function HabitsView({ days, questions }: { days: DayRecord[]; questions: 
         />
       </div>
 
-      <Panel span={12} title={m.habits.adjustedTitle} subtitle={m.habits.adjustedSubtitle}>
-        {adjusted.ok ? (
+      <Panel
+        span={12}
+        title={m.habits.adjustedTitle}
+        subtitle={m.habits.adjustedSubtitle}
+        state={adjusted}
+        needs={['recovery', 'sleepHours', 'strain', 'bedtime']}
+        what={m.habits.adjustedWhat}
+      >
+        {adjusted.ok && (
           <>
             <CoefficientPlot
               unit="pp"
@@ -66,8 +73,6 @@ export function HabitsView({ days, questions }: { days: DayRecord[]; questions: 
               {adjusted.skipped.length > 0 && m.habits.skipped(adjusted.skipped.length)}
             </p>
           </>
-        ) : (
-          <NotEnough state={adjusted} what={m.habits.adjustedWhat} />
         )}
       </Panel>
 
@@ -128,6 +133,6 @@ export function HabitsView({ days, questions }: { days: DayRecord[]; questions: 
           </div>
         </Panel>
       )}
-    </div>
+    </PanelGrid>
   );
 }

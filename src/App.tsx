@@ -43,8 +43,26 @@ interface ViewProps {
   questions: string[];
 }
 
-/** `?demo=1` — the link in the README, so a first visit lands on a full dashboard. */
-const wantsDemo = () => new URLSearchParams(window.location.search).get('demo') === '1';
+/**
+ * `?demo=1` — the link in the README, so a first visit lands on a full dashboard.
+ *
+ * `?demo=<days>` generates that many days instead of the default. It exists for
+ * one reason: most of this dashboard's panels have a minimum sample, and the
+ * only way to see what they look like below it — which is most of what somebody
+ * with a fresh WHOOP account will see — is to ask for a short one. Anything
+ * outside a sane range falls back to the default rather than trying.
+ */
+const DEMO_DAYS = { min: 7, max: 1500, default: 420 };
+
+function demoDays(): number | null {
+  const raw = new URLSearchParams(window.location.search).get('demo');
+  if (raw == null) return null;
+  if (raw === '1') return DEMO_DAYS.default;
+  const days = Number(raw);
+  return Number.isInteger(days) && days >= DEMO_DAYS.min && days <= DEMO_DAYS.max
+    ? days
+    : DEMO_DAYS.default;
+}
 
 export default function App() {
   const m = useMessages();
@@ -76,9 +94,10 @@ export default function App() {
       // following it wants to see the dashboard, not their own data. Nothing is
       // written to IndexedDB — `setExport` only persists when asked to — so the
       // export already cached there is still waiting after a plain reload.
-      if (wantsDemo()) {
+      const demo = demoDays();
+      if (demo != null) {
         const { generateDemoExport } = await import('@/lib/demo');
-        if (!cancelled) setExport(generateDemoExport(), { source: 'demo' });
+        if (!cancelled) setExport(generateDemoExport(demo), { source: 'demo' });
         return;
       }
 

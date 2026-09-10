@@ -24,8 +24,9 @@ import {
   type RatioResult,
   type SupportGaps,
 } from './econ';
-import { dayKey } from './format';
-import { mean, pearson, quantile, welchT, type Correlation } from './stats';
+import { fieldSpec, type FieldId } from './fields';
+import { addDays, dayKey } from './format';
+import { mean, pearson, quantile, sd, welchT, type Correlation } from './stats';
 import type { DayRecord } from './whoop/types';
 
 export const column = (days: DayRecord[], key: keyof DayRecord): (number | null)[] =>
@@ -943,4 +944,130 @@ export function activityWeekLoad(
     n: days.length,
     minN,
   };
+}
+
+/* ------------- 10. Qué se puede decir cuando un panel está apagado --------- */
+
+export interface VariableSummary {
+  id: FieldId;
+  /** Days in the range that carry a value. */
+  n: number;
+  /** Days in the range that do not. */
+  missing: number;
+  /** In the field's display unit, so it reads like the rest of the interface. */
+  mean: number | null;
+  sd: number | null;
+}
+
+/**
+ * Mean, spread and coverage of the variables a panel would have used.
+ *
+ * A switched-off panel that only says «94 days short» is throwing away the
+ * answer to a question the reader is entitled to: what *can* be said with what
+ * is already there. These four numbers per variable are always available —
+ * every one of them is defined on a single column with no minimum — so the
+ * space the estimate would have taken says something true instead of nothing.
+ */
+export function describeVariables(days: DayRecord[], ids: FieldId[]): VariableSummary[] {
+  return ids.map((id) => {
+    const { scale } = fieldSpec(id);
+    const values = days
+      .map((d) => d[id] as number | null)
+      .filter((v): v is number => v != null && Number.isFinite(v))
+      .map((v) => v * scale);
+    return {
+      id,
+      n: values.length,
+      missing: days.length - values.length,
+      mean: mean(values),
+      sd: sd(values),
+    };
+  });
+}
+
+export interface BindingVariable {
+  id: FieldId;
+  /** Complete rows there would be if this one variable were not required. */
+  without: number;
+  /** Complete rows there are. */
+  current: number;
+  /** Dropping this one variable alone would be enough to switch the panel on. */
+  decisive: boolean;
+}
+
+/**
+ * The variable that costs the panel the most rows, when there is one.
+ *
+ * Listwise deletion means a single sparsely recorded column decides the sample
+ * for everything: skin temperature arrived late in the export, and a model that
+ * asks for it can sit at fifty rows while every other variable it uses has two
+ * hundred. That is worth naming, because «wait three months» and «this one
+ * column is the whole problem» are different situations and the count alone
+ * cannot tell them apart.
+ *
+ * It is a diagnosis, not a suggestion. The panel asks for the variables it asks
+ * for; what this says is where the waiting is actually going.
+ */
+export function bindingVariable(
+  days: DayRecord[],
+  ids: FieldId[],
+  minN: number,
+): BindingVariable | null {
+  if (ids.length < 2) return null;
+
+  const complete = (subset: FieldId[]) =>
+    days.filter((d) =>
+      subset.every((id) => {
+        const v = d[id] as number | null;
+        return v != null && Number.isFinite(v);
+      }),
+    ).length;
+
+  const current = complete(ids);
+  let best: BindingVariable | null = null;
+  for (const id of ids) {
+    const without = complete(ids.filter((other) => other !== id));
+    if (without <= current) continue;
+    if (!best || without > best.without) {
+      best = { id, without, current, decisive: without >= minN };
+    }
+  }
+  return best;
+}
+
+export type SwitchOnForecast =
+  /** Waiting works: this is the day it happens, at one complete day per day. */
+  | { kind: 'date'; missing: number; day: string }
+  /** The selected window is shorter than the model's minimum. Waiting cannot fix that. */
+  | { kind: 'range'; minN: number }
+  /** The window is already full, so a new day pushes an old one out. */
+  | { kind: 'window' };
+
+/**
+ * When a switched-off panel would switch on.
+ *
+ * The naive answer — today plus the number of missing days — is wrong in two
+ * situations that are easy to be in, and printing a date that will never arrive
+ * is worse than printing nothing.
+ *
+ * The window is a rolling one. If it is shorter than the model's minimum, no
+ * amount of waiting gets there and the honest instruction is to widen the range.
+ * If it is already full, tomorrow adds a day at the front and drops one off the
+ * back, so the count moves for reasons that have nothing to do with waiting.
+ * Only when the window still has room does one more day mean one more row.
+ *
+ * Even then it assumes every day from here on carries a complete record for
+ * this panel, which is the optimistic case; the copy says so.
+ */
+export function forecastSwitchOn(options: {
+  missing: number;
+  minN: number;
+  range: number;
+  totalDays: number;
+  today?: Date;
+}): SwitchOnForecast {
+  const { missing, minN, range, totalDays, today = new Date() } = options;
+  if (range !== 0 && minN > range) return { kind: 'range', minN };
+  if (range !== 0 && totalDays >= range) return { kind: 'window' };
+  return { kind: 'date', missing, day: dayKey(addDays(today, missing)) };
 }

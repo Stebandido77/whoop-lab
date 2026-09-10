@@ -56,6 +56,13 @@ export const pad = (n: number) => String(n).padStart(2, '0');
 export const dayKey = (d: Date): string =>
   `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
+/** A new `Date` `count` days on. Local time, like everything else here. */
+export const addDays = (date: Date, count: number): Date => {
+  const out = new Date(date);
+  out.setDate(out.getDate() + count);
+  return out;
+};
+
 export const fromDayKey = (k: string): Date => {
   const [y, m, d] = k.split('-').map(Number);
   return new Date(y, m - 1, d);

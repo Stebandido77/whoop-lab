@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { HBarChart, SpectrumChart, TimeSeriesChart, type SeriesMarker } from '@/charts';
-import { Legend, NotEnough, Panel } from '@/components';
+import { Legend, Panel, PanelGrid } from '@/components';
 import { bpm, f0, f1, f2, fmtDayShort, ms, pct, signed, weekdayName } from '@/lib/format';
 import { useMessages } from '@/lib/i18n';
 import {
@@ -36,7 +36,7 @@ export function RecoveryView({ days }: { days: DayRecord[] }) {
     : [];
 
   return (
-    <div className="grid">
+    <PanelGrid days={days}>
       <Panel span={12} title={m.recovery.baselineTitle} subtitle={m.recovery.baselineSubtitle}>
         <TimeSeriesChart
           data={days}
@@ -169,8 +169,11 @@ export function RecoveryView({ days }: { days: DayRecord[] }) {
           span={6}
           title={m.recovery.rhythmTitle(m.recovery.rhythmSeries[r.key])}
           subtitle={m.recovery.rhythmSubtitle}
+          state={r.spectrum}
+          needs={[r.key]}
+          what={m.recovery.periodogramWhat}
         >
-          {r.spectrum.ok ? (
+          {r.spectrum.ok && (
             <>
               <SpectrumChart
                 points={r.spectrum.points}
@@ -193,8 +196,6 @@ export function RecoveryView({ days }: { days: DayRecord[] }) {
                 </span>
               </p>
             </>
-          ) : (
-            <NotEnough state={r.spectrum} what={m.recovery.periodogramWhat} />
           )}
         </Panel>
       ))}
@@ -215,6 +216,6 @@ export function RecoveryView({ days }: { days: DayRecord[] }) {
           }))}
         />
       </Panel>
-    </div>
+    </PanelGrid>
   );
 }

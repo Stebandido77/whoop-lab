@@ -200,6 +200,32 @@ button.ghost {
   padding: 14px 16px 12px;
   min-width: 0;
 }
+
+/*
+ * `PanelGrid` writes the resolved span here. It is a custom property and not a
+ * class because the resolver produces any width from 1 to 12, and the media
+ * query below still wins on a narrow screen — an inline `grid-column` would not
+ * have.
+ *
+ * The `.grid-panel` class is what keeps this from claiming things it does not
+ * lay out. `.grid > .panel` would also match the KPI cards, which are `.panel`
+ * elements inside their own nested grid carrying a `.span-3` class; this rule
+ * outranks that class, and every card went full width.
+ */
+.grid > .grid-panel {
+  grid-column: span var(--span, 12);
+}
+
+/*
+ * A switched-off panel stops at its content. Grid items stretch to the row by
+ * default, which is what used to give a two-line message the height of the chart
+ * it could not draw.
+ */
+.panel.off {
+  align-self: start;
+  background: var(--panel-2);
+  border-style: dashed;
+}
 .span-3 {
   grid-column: span 3;
 }
@@ -228,7 +254,8 @@ button.ghost {
   .span-5,
   .span-6,
   .span-7,
-  .span-8 {
+  .span-8,
+  .grid > .grid-panel {
     grid-column: span 12;
   }
   .kpi-row .span-3 {
@@ -431,6 +458,57 @@ th.num {
   padding: 26px 0;
   text-align: center;
 }
+/* ---------- the switched-off state ---------- */
+
+.off-state {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.off-headline {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 500;
+}
+.progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--panel-3);
+  overflow: hidden;
+}
+.progress span {
+  display: block;
+  height: 100%;
+  background: var(--strain);
+  border-radius: 3px;
+}
+.off-count,
+.off-forecast,
+.off-binding,
+.off-meanwhile {
+  margin: 0;
+}
+.off-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.off-binding {
+  color: var(--ink-2);
+}
+.off-meanwhile {
+  margin-top: 4px;
+  color: var(--muted);
+}
+.off-table {
+  font-size: 12px;
+}
+.off-table th {
+  font-weight: 500;
+  color: var(--muted);
+}
+
 /* ---------- circadian clock ---------- */
 
 /*

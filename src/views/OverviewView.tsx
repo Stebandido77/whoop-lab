@@ -6,7 +6,7 @@ import {
   recoveryToken,
   TimeSeriesChart,
 } from '@/charts';
-import { KpiCard, Legend, NotEnough, Panel } from '@/components';
+import { KpiCard, Legend, Panel, PanelGrid } from '@/components';
 import { f0, f1, f2, fmtDayLong, hoursMinutes, pct, signed, weekdayName } from '@/lib/format';
 import type { RatioProblem } from '@/lib/econ';
 import { useMessages, type Messages } from '@/lib/i18n';
@@ -46,7 +46,7 @@ export function OverviewView({
   const clock = useMemo(() => circadianClock(days), [days]);
 
   return (
-    <div className="grid">
+    <PanelGrid days={days}>
       <Panel span={12}>
         <div className="hero">
           <div className="rail">
@@ -154,16 +154,21 @@ export function OverviewView({
         />
       </div>
 
-      <Panel span={12} title={m.overview.clockTitle} subtitle={m.overview.clockSubtitle}>
-        {clock.ok ? (
+      <Panel
+        span={12}
+        title={m.overview.clockTitle}
+        subtitle={m.overview.clockSubtitle}
+        state={clock}
+        needs={['bedtime', 'wakeTime', 'strain', 'recovery']}
+        what={m.overview.clockWhat}
+      >
+        {clock.ok && (
           <>
             <CircadianClock data={clock} />
             <p className="callout" style={{ margin: '12px 0 0' }}>
               {m.overview.clockRingCaveat(pct(clock.meanRecovery))}
             </p>
           </>
-        ) : (
-          <NotEnough state={clock} what={m.overview.clockWhat} />
         )}
       </Panel>
 
@@ -185,8 +190,15 @@ export function OverviewView({
         />
       </Panel>
 
-      <Panel span={7} title={m.overview.scatterTitle} subtitle={m.overview.scatterSubtitle}>
-        {strainDose.ok ? (
+      <Panel
+        span={7}
+        title={m.overview.scatterTitle}
+        subtitle={m.overview.scatterSubtitle}
+        state={strainDose}
+        needs={['strain', 'recovery']}
+        what={m.overview.scatterWhat}
+      >
+        {strainDose.ok && (
           <>
             <BinScatterChart
               points={strainDose.points}
@@ -210,15 +222,24 @@ export function OverviewView({
               </p>
             )}
           </>
-        ) : (
-          <NotEnough state={strainDose} what={m.overview.scatterWhat} />
         )}
       </Panel>
 
-      <Elasticities result={elasticities} />
+      <Panel
+        span={12}
+        title={m.overview.elasticitiesTitle}
+        subtitle={m.overview.elasticitiesSubtitle}
+        state={elasticities}
+        needs={['recovery', 'sleepHours', 'strain', 'bedtime']}
+        what={m.overview.elasticitiesWhat}
+      >
+        {elasticities.ok && <Elasticities result={elasticities} />}
+      </Panel>
 
-      <Highlights days={days} />
-    </div>
+      <Panel span={5} title={m.overview.highlightsTitle} subtitle={m.overview.highlightsSubtitle}>
+        <Highlights days={days} />
+      </Panel>
+    </PanelGrid>
   );
 }
 
@@ -228,59 +249,49 @@ export function OverviewView({
  * denominator is, so the card says so rather than printing a figure whose
  * confidence set is really the whole number line.
  */
-function Elasticities({ result }: { result: ElasticitiesResult }) {
+function Elasticities({ result }: { result: Extract<ElasticitiesResult, { ok: true }> }) {
   const m = useMessages();
   return (
-    <Panel
-      span={12}
-      title={m.overview.elasticitiesTitle}
-      subtitle={m.overview.elasticitiesSubtitle}
-    >
-      {!result.ok ? (
-        <NotEnough state={result} what={m.overview.elasticitiesWhat} />
-      ) : (
-        <>
-          <table>
-            <thead>
-              <tr>
-                <th>{m.overview.colMarginalEffect}</th>
-                <th className="num">{m.overview.colPp}</th>
-                <th className="num">{m.overview.colCi95}</th>
-                <th className="num">{m.overview.colQ}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.terms.map((t) => (
-                <tr key={t.id}>
-                  <td>{m.overview.elasticity[t.id]}</td>
-                  <td
-                    className="num"
-                    style={{ color: t.coef > 0 ? 'var(--hi)' : 'var(--lo)', fontWeight: 500 }}
-                  >
-                    {signed(t.coef, f2)}
-                  </td>
-                  <td className="num" style={{ color: 'var(--muted)' }}>
-                    {m.overview.ciRange(f2(t.ciLow), f2(t.ciHigh))}
-                  </td>
-                  <td className="num">{t.q == null ? '—' : f2(t.q)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <>
+      <table>
+        <thead>
+          <tr>
+            <th>{m.overview.colMarginalEffect}</th>
+            <th className="num">{m.overview.colPp}</th>
+            <th className="num">{m.overview.colCi95}</th>
+            <th className="num">{m.overview.colQ}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {result.terms.map((t) => (
+            <tr key={t.id}>
+              <td>{m.overview.elasticity[t.id]}</td>
+              <td
+                className="num"
+                style={{ color: t.coef > 0 ? 'var(--hi)' : 'var(--lo)', fontWeight: 500 }}
+              >
+                {signed(t.coef, f2)}
+              </td>
+              <td className="num" style={{ color: 'var(--muted)' }}>
+                {m.overview.ciRange(f2(t.ciLow), f2(t.ciHigh))}
+              </td>
+              <td className="num">{t.q == null ? '—' : f2(t.q)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
-          <div className="callout" style={{ marginTop: 12 }}>
-            {result.substitution.identified
-              ? m.overview.substitution(
-                  f2(Math.abs(result.substitution.coef)),
-                  f2(Math.min(result.substitution.ciLow, result.substitution.ciHigh)),
-                  f2(Math.max(result.substitution.ciLow, result.substitution.ciHigh)),
-                  f0(result.n),
-                )
-              : m.overview.substitutionUnidentified(ratioReason(m, result.substitution.problem))}
-          </div>
-        </>
-      )}
-    </Panel>
+      <div className="callout" style={{ marginTop: 12 }}>
+        {result.substitution.identified
+          ? m.overview.substitution(
+              f2(Math.abs(result.substitution.coef)),
+              f2(Math.min(result.substitution.ciLow, result.substitution.ciHigh)),
+              f2(Math.max(result.substitution.ciLow, result.substitution.ciHigh)),
+              f0(result.n),
+            )
+          : m.overview.substitutionUnidentified(ratioReason(m, result.substitution.problem))}
+      </div>
+    </>
   );
 }
 
@@ -351,17 +362,15 @@ function Highlights({ days }: { days: DayRecord[] }) {
   }
 
   return (
-    <Panel span={5} title={m.overview.highlightsTitle} subtitle={m.overview.highlightsSubtitle}>
-      <table>
-        <tbody>
-          {rows.map(([label, value]) => (
-            <tr key={label}>
-              <td style={{ color: 'var(--muted)', width: '42%' }}>{label}</td>
-              <td>{value}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </Panel>
+    <table>
+      <tbody>
+        {rows.map(([label, value]) => (
+          <tr key={label}>
+            <td style={{ color: 'var(--muted)', width: '42%' }}>{label}</td>
+            <td>{value}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
